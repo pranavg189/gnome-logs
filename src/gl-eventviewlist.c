@@ -50,6 +50,7 @@ typedef struct
     GtkWidget *event_search;
     GtkWidget *event_scrolled;
     GtkWidget *search_entry;
+    GtkWidget *search_dropdown_button;
     gchar *search_text;
     const gchar *boot_match;
 } GlEventViewListPrivate;
@@ -667,6 +668,22 @@ gl_event_view_create_empty (G_GNUC_UNUSED GlEventViewList *view)
     return box;
 }
 
+static void
+create_search_dropdown_menu(GlEventViewList *view)
+{
+
+    GlEventViewListPrivate *priv;
+    GMenu *search_menu;
+
+    priv = gl_event_view_list_get_instance_private (view);
+
+    search_menu = g_menu_new();
+
+    gtk_menu_button_set_menu_model (GTK_MENU_BUTTON (priv->search_dropdown_button),
+                                    G_MENU_MODEL (search_menu));
+
+}
+
 static GtkWidget *
 gl_event_list_view_create_row_widget (gpointer item,
                                       gpointer user_data)
@@ -1009,6 +1026,8 @@ gl_event_view_list_class_init (GlEventViewListClass *klass)
                                                   event_scrolled);
     gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
                                                   search_entry);
+    gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
+                                                  search_dropdown_button);
 
     gtk_widget_class_bind_template_callback (widget_class,
                                              on_search_entry_changed);
@@ -1037,6 +1056,8 @@ gl_event_view_list_init (GlEventViewList *view)
 
     priv->journal_model = gl_journal_model_new ();
     g_application_bind_busy_property (g_application_get_default (), priv->journal_model, "loading");
+
+    create_search_dropdown_menu(view);
 
     g_signal_connect (priv->event_scrolled, "edge-reached",
                       G_CALLBACK (gl_event_list_view_edge_reached), view);

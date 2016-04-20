@@ -25,10 +25,33 @@
                         <property name="visible">True</property>
                         <signal name="notify::search-mode-enabled" handler="on_search_bar_notify_search_mode_enabled"/>
                         <child>
-                            <object class="GtkSearchEntry" id="search_entry">
+                            <object class="GtkBox" id="event_search_box">
+                                <property name="orientation">horizontal</property>
                                 <property name="visible">True</property>
-                                <property name="width-request">400</property>
-                                <signal name="search-changed" handler="on_search_entry_changed" />
+                                <property name="spacing">0</property>
+                                <style>
+                                    <class name="linked"/>
+                                </style>
+                                    <child>
+                                        <object class="GtkSearchEntry" id="search_entry">
+                                            <property name="visible">True</property>
+                                            <property name="width-request">400</property>
+                                            <signal name="search-changed" handler="on_search_entry_changed" />
+                                        </object>
+                                    </child>
+                                    <child>
+                                        <object class="GtkMenuButton" id="search_dropdown_button">
+                                            <property name="direction">GTK_ARROW_DOWN</property>
+                                            <property name="tooltip-text" translatable="yes">Select the parameter from which to search from</property>
+                                            <property name="visible">True</property> 
+                                            <!-- <property name="relief">GTK_RELIEF_NONE</property> -->
+                                            <style>
+                                                <class name="search-menu-button"/>
+                                            </style>
+
+                                         </object>
+
+                                    </child>
                             </object>
                         </child>
                     </object>
