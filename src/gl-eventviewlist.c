@@ -669,15 +669,55 @@ gl_event_view_create_empty (G_GNUC_UNUSED GlEventViewList *view)
 }
 
 static void
-create_search_dropdown_menu(GlEventViewList *view)
+action_pid_status (GSimpleAction *action,
+                   GVariant      *variant,
+                   gpointer       user_data)
+{
+    GVariant *variant_state;
+    gboolean state;
+
+    variant_state = g_action_get_state (G_ACTION (action));
+    state = g_variant_get_boolean (variant_state);
+
+    g_action_change_state (G_ACTION (action), g_variant_new_boolean (!state));
+}
+
+static void
+create_search_dropdown_menu (GlEventViewList *view)
 {
 
     GlEventViewListPrivate *priv;
     GMenu *search_menu;
+    GMenu *parameter_menu;
+    GMenu *search_dialog_menu;
 
     priv = gl_event_view_list_get_instance_private (view);
 
     search_menu = g_menu_new();
+    parameter_menu = g_menu_new();
+    search_dialog_menu = g_menu_new();
+
+    GMenuItem *pid = g_menu_item_new ("PID", NULL);
+    GMenuItem *process_name = g_menu_item_new ("Process name", NULL);
+    GMenuItem *message = g_menu_item_new ("Message", NULL);
+
+    gboolean pidstatus;
+
+    GVariant *variant = g_variant_new_boolean (pidstatus);
+    g_menu_item_set_action_and_target_value (pid, "win.pidstatus",
+                                            NULL);
+
+    g_menu_append_item (parameter_menu, pid);
+    g_menu_append_item (parameter_menu, process_name);
+    g_menu_append_item (parameter_menu, message);
+
+    g_menu_prepend_section (search_menu, "Parameters", G_MENU_MODEL(parameter_menu));
+
+    GMenuItem *search_dialog = g_menu_item_new("Advanced Options", NULL);
+
+    g_menu_append_item(search_dialog_menu, search_dialog);
+
+    g_menu_append_section(search_menu, NULL, G_MENU_MODEL(search_dialog_menu));
 
     gtk_menu_button_set_menu_model (GTK_MENU_BUTTON (priv->search_dropdown_button),
                                     G_MENU_MODEL (search_menu));
@@ -1035,6 +1075,10 @@ gl_event_view_list_class_init (GlEventViewListClass *klass)
                                              on_search_bar_notify_search_mode_enabled);
 }
 
+static GActionEntry actions[] = {
+    { "pid-status", NULL, NULL, "false", action_pid_status }
+};
+
 static void
 gl_event_view_list_init (GlEventViewList *view)
 {
@@ -1056,6 +1100,15 @@ gl_event_view_list_init (GlEventViewList *view)
 
     priv->journal_model = gl_journal_model_new ();
     g_application_bind_busy_property (g_application_get_default (), priv->journal_model, "loading");
+
+    GActionGroup *event_view_list_action_group = G_ACTION_GROUP (g_simple_action_group_new ());
+
+    g_action_map_add_action_entries (G_ACTION_MAP (event_view_list_action_group), actions,
+                                     G_N_ELEMENTS (actions), view);
+
+    gtk_widget_insert_action_group (GTK_WIDGET (view),
+                                    "view",
+                                    G_ACTION_GROUP (event_view_list_action_group));
 
     create_search_dropdown_menu(view);
 
