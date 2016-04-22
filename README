@@ -1,6 +1,5 @@
-GNOME Logs is a log viewer for the systemd journal
+GNOME Logs GSoC Search Idea Prototype:
 
-https://wiki.gnome.org/Apps/Logs
+Progress so far:
 
-It depends on GTK+ 3.10 or above, itstool and libsystemd-journal at build time,
-and gsettings-desktop-schemas at runtime.
+<img src="https://github.com/pranavg189/gnome-logs/blob/search-gsoc/gnome-logs-gsoc.png"/>
