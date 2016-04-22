@@ -51,8 +51,14 @@ typedef struct
     GtkWidget *event_scrolled;
     GtkWidget *search_entry;
     GtkWidget *search_dropdown_button;
+    GtkWidget *search_menu_popover;
+    GtkWidget *pid_checkbox;
     gchar *search_text;
     const gchar *boot_match;
+
+    gboolean *pid_status;
+    gboolean *process_name_status;
+    gboolean *message_status;
 } GlEventViewListPrivate;
 
 /* We define these two enum values as 2 and 3 to avoid the conflict with TRUE
@@ -673,13 +679,50 @@ action_pid_status (GSimpleAction *action,
                    GVariant      *variant,
                    gpointer       user_data)
 {
-    GVariant *variant_state;
-    gboolean state;
+    gboolean pid_checkbox_status;
 
-    variant_state = g_action_get_state (G_ACTION (action));
-    state = g_variant_get_boolean (variant_state);
+    pid_checkbox_status = g_variant_get_boolean (variant);
 
-    g_action_change_state (G_ACTION (action), g_variant_new_boolean (!state));
+    if(pid_checkbox_status == TRUE)
+        g_print("pid checkbox is enabled\n");
+    else
+        g_print("pid_checkbox is not enabled\n");
+
+    g_simple_action_set_state (action, variant);
+}
+
+static void
+action_processname_status (GSimpleAction *action,
+                       GVariant      *variant,
+                       gpointer       user_data)
+{
+    gboolean processname_checkbox_status;
+
+    processname_checkbox_status = g_variant_get_boolean (variant);
+
+    if(processname_checkbox_status == TRUE)
+        g_print("processname checkbox is enabled\n");
+    else
+        g_print("processname_checkbox is not enabled\n");
+
+    g_simple_action_set_state (action, variant);
+}
+
+static void
+action_message_status (GSimpleAction *action,
+                       GVariant      *variant,
+                       gpointer       user_data)
+{
+    gboolean message_checkbox_status;
+
+    message_checkbox_status = g_variant_get_boolean (variant);
+
+    if(message_checkbox_status == TRUE)
+        g_print("message checkbox is enabled\n");
+    else
+        g_print("message_checkbox is not enabled\n");
+
+    g_simple_action_set_state (action, variant);
 }
 
 static void
@@ -701,10 +744,11 @@ create_search_dropdown_menu (GlEventViewList *view)
     GMenuItem *process_name = g_menu_item_new ("Process name", NULL);
     GMenuItem *message = g_menu_item_new ("Message", NULL);
 
-    gboolean pidstatus;
-
-    GVariant *variant = g_variant_new_boolean (pidstatus);
-    g_menu_item_set_action_and_target_value (pid, "win.pidstatus",
+    g_menu_item_set_action_and_target_value (pid, "view.pid-status",
+                                            NULL);
+    g_menu_item_set_action_and_target_value (process_name, "view.processname-status",
+                                            NULL);
+    g_menu_item_set_action_and_target_value (message, "view.message-status",
                                             NULL);
 
     g_menu_append_item (parameter_menu, pid);
@@ -720,7 +764,7 @@ create_search_dropdown_menu (GlEventViewList *view)
     g_menu_append_section(search_menu, NULL, G_MENU_MODEL(search_dialog_menu));
 
     gtk_menu_button_set_menu_model (GTK_MENU_BUTTON (priv->search_dropdown_button),
-                                    G_MENU_MODEL (search_menu));
+                                    G_MENU_MODEL(search_menu));
 
 }
 
@@ -1068,6 +1112,10 @@ gl_event_view_list_class_init (GlEventViewListClass *klass)
                                                   search_entry);
     gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
                                                   search_dropdown_button);
+    gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
+                                                  search_menu_popover);
+    gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
+                                                  pid_checkbox);
 
     gtk_widget_class_bind_template_callback (widget_class,
                                              on_search_entry_changed);
@@ -1076,7 +1124,9 @@ gl_event_view_list_class_init (GlEventViewListClass *klass)
 }
 
 static GActionEntry actions[] = {
-    { "pid-status", NULL, NULL, "false", action_pid_status }
+    { "pid-status", NULL, NULL, "false", action_pid_status },
+    { "processname-status", NULL, NULL, "false", action_processname_status },
+    { "message-status", NULL, NULL, "false", action_message_status }
 };
 
 static void
