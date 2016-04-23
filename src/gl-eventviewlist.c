@@ -318,9 +318,12 @@ calculate_match (GlJournalEntry *entry,
         return matches;
     }
 
-    while (token_index < token_array->len)
+
+    /* if Logical AND or OR used in search text */
+    while (token_index < token_array->len)       /* iterate through the token array */
     {
         field_name = g_ptr_array_index (token_array, token_index);
+        g_print("field_name: %s\n", field_name);
         token_index++;
 
         if (token_index == token_array->len)
@@ -330,6 +333,7 @@ calculate_match (GlJournalEntry *entry,
 
         field_value = g_ptr_array_index (token_array, token_index);
         token_index++;
+        g_print("field_value: %s\n", field_value);
 
         if (case_sensetive)
         {
@@ -460,7 +464,7 @@ search_in_result (GlJournalEntry *entry,
 }
 
 static void
-listbox_update_header_func (GtkListBoxRow *row,
+listbox_update_header_func (GtkListBoxRow *row,    // draws a GtkSeperator on the header of each listboxrow
                             GtkListBoxRow *before,
                             gpointer user_data)
 {
@@ -681,12 +685,16 @@ action_pid_status (GSimpleAction *action,
 {
     gboolean pid_checkbox_status;
 
+    GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (user_data);
+
     pid_checkbox_status = g_variant_get_boolean (variant);
 
     if(pid_checkbox_status == TRUE)
         g_print("pid checkbox is enabled\n");
     else
         g_print("pid_checkbox is not enabled\n");
+
+    priv->pid_status = pid_checkbox_status;
 
     g_simple_action_set_state (action, variant);
 }
@@ -698,12 +706,16 @@ action_processname_status (GSimpleAction *action,
 {
     gboolean processname_checkbox_status;
 
+    GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (user_data);
+
     processname_checkbox_status = g_variant_get_boolean (variant);
 
     if(processname_checkbox_status == TRUE)
         g_print("processname checkbox is enabled\n");
     else
         g_print("processname_checkbox is not enabled\n");
+
+    priv->process_name_status = processname_checkbox_status;
 
     g_simple_action_set_state (action, variant);
 }
@@ -715,12 +727,16 @@ action_message_status (GSimpleAction *action,
 {
     gboolean message_checkbox_status;
 
+    GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (user_data);
+
     message_checkbox_status = g_variant_get_boolean (variant);
 
     if(message_checkbox_status == TRUE)
         g_print("message checkbox is enabled\n");
     else
         g_print("message_checkbox is not enabled\n");
+
+    priv->message_status = message_checkbox_status;
 
     g_simple_action_set_state (action, variant);
 }
@@ -1035,6 +1051,27 @@ on_search_entry_changed (GtkSearchEntry *entry,
 
     gl_event_view_list_search (GL_EVENT_VIEW_LIST (user_data),
                                gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
+
+    if( gtk_entry_get_text_length ( GTK_ENTRY (priv->search_entry)) == 0)
+    {
+        g_print("empty text\n");
+    }
+    else
+    {
+        g_print("text changed\n");
+    }
+
+    // get all the tokens in the string
+
+    // check for all the tokens which are matching the parameters selected in the checkboxes
+
+    const gchar *query[] = { NULL, NULL };
+
+    query[0] = priv->boot_match;
+    query[1] = g_strdup_printf ("_PID=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
+    gl_journal_model_set_matches (priv->journal_model, query);
+
+
 }
 
 static void
@@ -1173,9 +1210,9 @@ gl_event_view_list_init (GlEventViewList *view)
     gtk_list_box_set_header_func (GTK_LIST_BOX (priv->entries_box),
                                   (GtkListBoxUpdateHeaderFunc) listbox_update_header_func,
                                   NULL, NULL);
-    gtk_list_box_set_filter_func (GTK_LIST_BOX (priv->entries_box),
+    /*gtk_list_box_set_filter_func (GTK_LIST_BOX (priv->entries_box),
                                   (GtkListBoxFilterFunc) listbox_search_filter_func,
-                                  view, NULL);
+                                  view, NULL);*/
     gtk_list_box_set_placeholder (GTK_LIST_BOX (priv->entries_box),
                                   gl_event_view_create_empty (view));
     g_signal_connect (priv->entries_box, "row-activated",
