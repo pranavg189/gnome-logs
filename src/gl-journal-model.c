@@ -246,6 +246,25 @@ gl_journal_model_set_matches (GlJournalModel      *model,
     gl_journal_model_fetch_more_entries (model, FALSE);
 }
 
+
+// Now, in the naive stage , we just assume that there is only one single string present meaning only single token
+// Also, first I will implement it for just message field and try to evaluate it's performance.
+void
+gl_journal_model_calculate_match (GlJournalModel *model,
+                                  gchar *search_string)
+{
+
+}
+
+// other function for calculating exact matches....in this we can simply use gl_journal_model_set_matches() function
+// to set the matches
+void
+gl_journal_model_calculate_exact_match(GlJournalModel *model,
+                                       gchar *search_string)
+{
+
+}
+
 gchar *
 gl_journal_model_get_current_boot_time (GlJournalModel *model,
                                         const gchar *boot_match)

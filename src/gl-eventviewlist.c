@@ -56,9 +56,9 @@ typedef struct
     gchar *search_text;
     const gchar *boot_match;
 
-    gboolean *pid_status;
-    gboolean *process_name_status;
-    gboolean *message_status;
+    gboolean pid_status;
+    gboolean process_name_status;
+    gboolean message_status;
 } GlEventViewListPrivate;
 
 /* We define these two enum values as 2 and 3 to avoid the conflict with TRUE
@@ -1052,24 +1052,55 @@ on_search_entry_changed (GtkSearchEntry *entry,
     gl_event_view_list_search (GL_EVENT_VIEW_LIST (user_data),
                                gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
 
+    const gchar *query[] = { NULL, NULL };   // search parameters
+
+    query[0] = priv->boot_match;
+
     if( gtk_entry_get_text_length ( GTK_ENTRY (priv->search_entry)) == 0)
     {
         g_print("empty text\n");
+
+        gl_journal_model_set_matches (priv->journal_model, query);
     }
     else
     {
+
         g_print("text changed\n");
+
+
+        gchar *search_text_copy = g_strdup (priv->search_text);
+
+        GPtrArray *token_array;
+        token_array = tokenize_search_string (search_text_copy);
+
+        // I will have to write a function similar to calculate_match() which will filter the journal-model
+        // to the tokens.
+
+        // get all the tokens in the string
+
+        // check for all the tokens which are matching the parameters selected in the checkboxes
+
+        // all journal-model modifying functions can be written in journal-model module and can be called here...
+
+
+        if(priv->pid_status == TRUE)
+        {
+            query[1] = g_strdup_printf ("_PID=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
+        }
+
+        if(priv->process_name_status == TRUE)
+        {
+            query[1] = g_strdup_printf ("_COMM=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
+        }
+
+        if(priv->message_status == TRUE)
+        {
+            query[1] = g_strdup_printf ("MESSAGE=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
+        }
+
+        gl_journal_model_set_matches (priv->journal_model, query);
+
     }
-
-    // get all the tokens in the string
-
-    // check for all the tokens which are matching the parameters selected in the checkboxes
-
-    const gchar *query[] = { NULL, NULL };
-
-    query[0] = priv->boot_match;
-    query[1] = g_strdup_printf ("_PID=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
-    gl_journal_model_set_matches (priv->journal_model, query);
 
 
 }
