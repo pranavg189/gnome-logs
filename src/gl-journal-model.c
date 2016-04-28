@@ -28,12 +28,17 @@ struct _GlJournalModel
     GlJournal *journal;
     GPtrArray *entries;
 
+    gchar *search_string;
+    gboolean *message_checkbox_status;
+    gboolean *process_name_checkbox_status;
+
     guint n_entries_to_fetch;
     gboolean fetched_all;
     guint idle_source;
 };
 
 static void gl_journal_model_interface_init (GListModelInterface *iface);
+static gboolean gl_journal_model_calculate_match (GlJournalEntry *entry, gchar *search_string);
 
 G_DEFINE_TYPE_WITH_CODE (GlJournalModel, gl_journal_model, G_TYPE_OBJECT,
                          G_IMPLEMENT_INTERFACE (G_TYPE_LIST_MODEL, gl_journal_model_interface_init))
@@ -46,6 +51,16 @@ enum
     N_PROPERTIES
 };
 
+enum
+{
+    PID,
+    PROCESS_NAME,
+    MESSAGE,
+    NUM_CHECKBOX_PARAMETERS
+};
+
+gboolean journal_checkbox_value[NUM_CHECKBOX_PARAMETERS] = {FALSE};
+
 static GParamSpec *properties[N_PROPERTIES];
 
 static gboolean
@@ -54,6 +69,8 @@ gl_journal_model_fetch_idle (gpointer user_data)
     GlJournalModel *model = user_data;
     GlJournalEntry *entry;
     guint last;
+
+    g_print("n_entries_to_fetch_idle: %d\n", model->n_entries_to_fetch);
 
     g_assert (model->n_entries_to_fetch > 0);
 
@@ -82,6 +99,46 @@ gl_journal_model_fetch_idle (gpointer user_data)
     }
 }
 
+// This source function used when searching the results currently only searches through message;
+static gboolean
+gl_journal_model_search_fetch_idle (gpointer user_data)
+{
+    GlJournalModel *model = user_data;
+    GlJournalEntry *entry;
+    guint last;
+
+    g_print("n_entries_to_fetch_idle: %d\n", model->n_entries_to_fetch);
+
+    g_assert (model->n_entries_to_fetch > 0);
+
+    last = model->entries->len;
+    if ((entry = gl_journal_previous (model->journal)))
+    {
+         if( gl_journal_model_calculate_match(entry, model->search_string) )
+        {
+            model->n_entries_to_fetch--;
+            g_ptr_array_add (model->entries, entry);
+            g_list_model_items_changed (G_LIST_MODEL (model), last, 0, 1);
+        }
+    }
+    else
+    {
+        model->fetched_all = TRUE;
+        model->n_entries_to_fetch = 0;
+    }
+
+    if (model->n_entries_to_fetch > 0)
+    {
+        return G_SOURCE_CONTINUE;
+    }
+    else
+    {
+        model->idle_source = 0;
+        g_object_notify_by_pspec (G_OBJECT (model), properties[PROP_LOADING]);
+        return G_SOURCE_REMOVE;
+    }
+}
+
 static void
 gl_journal_model_init (GlJournalModel *model)
 {
@@ -89,7 +146,7 @@ gl_journal_model_init (GlJournalModel *model)
     model->journal = gl_journal_new ();
     model->entries = g_ptr_array_new_with_free_func (g_object_unref);
 
-    gl_journal_model_fetch_more_entries (model, FALSE);
+    gl_journal_model_fetch_more_entries (model, FALSE, FALSE);
 }
 
 static void
@@ -243,17 +300,72 @@ gl_journal_model_set_matches (GlJournalModel      *model,
 
     gl_journal_set_matches (model->journal, matches);
 
-    gl_journal_model_fetch_more_entries (model, FALSE);
+    gl_journal_model_fetch_more_entries (model, FALSE, FALSE);
 }
 
 
 // Now, in the naive stage , we just assume that there is only one single string present meaning only single token
 // Also, first I will implement it for just message field and try to evaluate it's performance.
+// we populate the journal model entries according to search parameters in this function.
 void
-gl_journal_model_calculate_match (GlJournalModel *model,
-                                  gchar *search_string)
+gl_journal_model_search_init (GlJournalModel *model,
+                              gchar *search_string,
+                              gboolean *parameters)
+{
+    gint i;
+
+    g_return_if_fail (GL_IS_JOURNAL_MODEL (model));
+   
+   // model->n_entries_to_fetch = 50;
+    //g_assert (model->n_entries_to_fetch > 0);
+    /* first remove the entries from the existing journal */
+
+    // take the checkbox values from eventviewlist module
+    for(i=0; i <= NUM_CHECKBOX_PARAMETERS; i++)
+    {
+        journal_checkbox_value[i] = parameters[i];
+        g_print("checkbox %d = %d\n", i, journal_checkbox_value[i]);
+    }
+
+
+
+    gl_journal_model_stop_idle (model);
+
+    model->fetched_all = FALSE;
+    if (model->entries->len > 0)
+    {
+        g_list_model_items_changed (G_LIST_MODEL (model), 0, model->entries->len, 0);
+        g_ptr_array_remove_range (model->entries, 0, model->entries->len);
+    }
+
+    /* populate the entries pointer array according to the search_string */
+    model->search_string = search_string;
+
+    gl_journal_go_to_start(model->journal);
+
+    gl_journal_model_fetch_more_entries(model, FALSE, TRUE);
+
+
+}
+
+// function used to return if the journal entry entry contains any matching string from the search text
+static gboolean
+gl_journal_model_calculate_match (GlJournalEntry *entry, gchar *search_string)
 {
 
+    const gchar *process_name;
+    const gchar *message;
+
+    process_name = gl_journal_entry_get_command_line (entry);
+    message = gl_journal_entry_get_message (entry);
+
+    if((journal_checkbox_value[PROCESS_NAME] ? strstr (process_name, search_string) : NULL)
+       || (journal_checkbox_value[MESSAGE] ? strstr (message, search_string) : NULL))
+    {
+        return TRUE;
+    }
+    else
+        return FALSE;
 }
 
 // other function for calculating exact matches....in this we can simply use gl_journal_model_set_matches() function
@@ -262,6 +374,8 @@ void
 gl_journal_model_calculate_exact_match(GlJournalModel *model,
                                        gchar *search_string)
 {
+    g_ptr_array_free (model->entries, TRUE);
+    model->entries = NULL;
 
 }
 
@@ -306,7 +420,8 @@ gl_journal_model_get_loading (GlJournalModel *model)
  */
 void
 gl_journal_model_fetch_more_entries (GlJournalModel *model,
-                                     gboolean        all)
+                                     gboolean        all,
+                                     gboolean search_enabled)
 {
     g_return_if_fail (GL_IS_JOURNAL_MODEL (model));
 
@@ -320,7 +435,15 @@ gl_journal_model_fetch_more_entries (GlJournalModel *model,
 
     if (model->idle_source == 0)
     {
-        model->idle_source = g_idle_add_full (G_PRIORITY_LOW, gl_journal_model_fetch_idle, model, NULL);
+        if(search_enabled == FALSE)
+        {
+            model->idle_source = g_idle_add_full (G_PRIORITY_LOW, gl_journal_model_fetch_idle, model, NULL);
+        }
+        else
+        {
+            model->idle_source = g_idle_add_full (G_PRIORITY_LOW, gl_journal_model_search_fetch_idle, model, NULL);
+        }
+
         g_object_notify_by_pspec (G_OBJECT (model), properties[PROP_LOADING]);
     }
 }

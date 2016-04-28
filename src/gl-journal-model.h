@@ -32,11 +32,17 @@ void                    gl_journal_model_set_matches                    (GlJourn
 gboolean                gl_journal_model_get_loading                    (GlJournalModel *model);
 
 void                    gl_journal_model_fetch_more_entries             (GlJournalModel *model,
-                                                                         gboolean        all);
+                                                                         gboolean        all,
+                                                                         gboolean search_enabled);
 
 GArray *                gl_journal_model_get_boot_ids                   (GlJournalModel *model);
 
 gchar *                 gl_journal_model_get_current_boot_time          (GlJournalModel *model,
                                                                          const gchar *boot_match);
+void					gl_journal_model_search_init 				    (GlJournalModel *model,
+                                  										 gchar *search_string,
+                                  										 gboolean parameters[]);
+void					gl_journal_model_calculate_exact_match			(GlJournalModel *model,
+                                       									 gchar *search_string);
 
 #endif

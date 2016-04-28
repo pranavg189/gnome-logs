@@ -56,6 +56,8 @@ typedef struct
     gchar *search_text;
     const gchar *boot_match;
 
+    GHashTable *checkbox_values;
+
     gboolean pid_status;
     gboolean process_name_status;
     gboolean message_status;
@@ -68,6 +70,16 @@ typedef enum
     LOGICAL_OR = 2,
     LOGICAL_AND = 3
 } GlEventViewListLogic;
+
+enum
+{
+    PID,
+    PROCESS_NAME,
+    MESSAGE,
+    NUM_CHECKBOX_PARAMETERS
+};
+
+gboolean checkbox_value[NUM_CHECKBOX_PARAMETERS] = {FALSE};
 
 G_DEFINE_TYPE_WITH_PRIVATE (GlEventViewList, gl_event_view_list, GTK_TYPE_BOX)
 
@@ -685,8 +697,6 @@ action_pid_status (GSimpleAction *action,
 {
     gboolean pid_checkbox_status;
 
-    GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (user_data);
-
     pid_checkbox_status = g_variant_get_boolean (variant);
 
     if(pid_checkbox_status == TRUE)
@@ -694,7 +704,7 @@ action_pid_status (GSimpleAction *action,
     else
         g_print("pid_checkbox is not enabled\n");
 
-    priv->pid_status = pid_checkbox_status;
+    checkbox_value[PID] = pid_checkbox_status;
 
     g_simple_action_set_state (action, variant);
 }
@@ -706,8 +716,6 @@ action_processname_status (GSimpleAction *action,
 {
     gboolean processname_checkbox_status;
 
-    GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (user_data);
-
     processname_checkbox_status = g_variant_get_boolean (variant);
 
     if(processname_checkbox_status == TRUE)
@@ -715,7 +723,7 @@ action_processname_status (GSimpleAction *action,
     else
         g_print("processname_checkbox is not enabled\n");
 
-    priv->process_name_status = processname_checkbox_status;
+    checkbox_value[PROCESS_NAME] = processname_checkbox_status;
 
     g_simple_action_set_state (action, variant);
 }
@@ -727,8 +735,6 @@ action_message_status (GSimpleAction *action,
 {
     gboolean message_checkbox_status;
 
-    GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (user_data);
-
     message_checkbox_status = g_variant_get_boolean (variant);
 
     if(message_checkbox_status == TRUE)
@@ -736,7 +742,7 @@ action_message_status (GSimpleAction *action,
     else
         g_print("message_checkbox is not enabled\n");
 
-    priv->message_status = message_checkbox_status;
+    checkbox_value[MESSAGE] = message_checkbox_status;
 
     g_simple_action_set_state (action, variant);
 }
@@ -1058,20 +1064,22 @@ on_search_entry_changed (GtkSearchEntry *entry,
 
     if( gtk_entry_get_text_length ( GTK_ENTRY (priv->search_entry)) == 0)
     {
-        g_print("empty text\n");
+        //g_print("empty text\n");
 
         gl_journal_model_set_matches (priv->journal_model, query);
     }
     else
     {
 
-        g_print("text changed\n");
+        //g_print("text changed\n");
 
 
         gchar *search_text_copy = g_strdup (priv->search_text);
 
         GPtrArray *token_array;
         token_array = tokenize_search_string (search_text_copy);
+
+        gl_journal_model_search_init (priv->journal_model, search_text_copy, checkbox_value);
 
         // I will have to write a function similar to calculate_match() which will filter the journal-model
         // to the tokens.
@@ -1082,7 +1090,7 @@ on_search_entry_changed (GtkSearchEntry *entry,
 
         // all journal-model modifying functions can be written in journal-model module and can be called here...
 
-
+        /*
         if(priv->pid_status == TRUE)
         {
             query[1] = g_strdup_printf ("_PID=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
@@ -1099,6 +1107,7 @@ on_search_entry_changed (GtkSearchEntry *entry,
         }
 
         gl_journal_model_set_matches (priv->journal_model, query);
+        */
 
     }
 
@@ -1142,7 +1151,18 @@ gl_event_list_view_edge_reached (GtkScrolledWindow *scrolled,
     GlEventViewListPrivate *priv = gl_event_view_list_get_instance_private (view);
 
     if (pos == GTK_POS_BOTTOM)
-        gl_journal_model_fetch_more_entries (priv->journal_model, FALSE);
+    {
+        if(gtk_search_bar_get_search_mode (GTK_SEARCH_BAR (priv->event_search)) == TRUE)
+        {
+
+        gl_journal_model_fetch_more_entries (priv->journal_model, FALSE, TRUE);
+
+        }
+        else
+        {
+            gl_journal_model_fetch_more_entries (priv->journal_model, FALSE, FALSE);
+        }
+    }
 }
 
 static void
@@ -1213,6 +1233,11 @@ gl_event_view_list_init (GlEventViewList *view)
     priv->category_sizegroup = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
     priv->message_sizegroup = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
     priv->time_sizegroup = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
+    priv->checkbox_values = g_hash_table_new(NULL, NULL);
+
+    g_hash_table_insert (priv->checkbox_values, "PID", (gpointer) TRUE);
+    g_hash_table_insert (priv->checkbox_values, "MESSAGE", (gpointer)TRUE);
+    g_hash_table_insert (priv->checkbox_values, "PROCESS_NAME",(gpointer) TRUE);
 
     categories = GL_CATEGORY_LIST (priv->categories);
 
@@ -1272,7 +1297,7 @@ gl_event_view_list_search (GlEventViewList *view,
     priv->search_text = g_strdup (needle);
 
     /* for search, we need all entries - tell the model to fetch them */
-    gl_journal_model_fetch_more_entries (priv->journal_model, TRUE);
+    gl_journal_model_fetch_more_entries (priv->journal_model, TRUE, TRUE);
 
     gtk_list_box_invalidate_filter (priv->entries_box);
 }
