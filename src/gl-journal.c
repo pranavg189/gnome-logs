@@ -631,6 +631,18 @@ gl_journal_set_matches (GlJournal           *journal,
         g_warning ("Error seeking to start of systemd journal: %s", g_strerror (-r));
 }
 
+void
+gl_journal_go_to_start (GlJournal *journal)
+{
+    GlJournalPrivate *priv = gl_journal_get_instance_private (journal);
+    int r;
+
+    r = sd_journal_seek_tail (priv->journal);
+    if (r < 0)
+        g_warning ("Error seeking to start of systemd journal: %s", g_strerror (-r));
+
+}
+
 GlJournalEntry *
 gl_journal_previous (GlJournal *journal)
 {

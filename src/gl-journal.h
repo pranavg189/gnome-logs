@@ -77,6 +77,7 @@ GlJournalEntry * gl_journal_previous (GlJournal *journal);
 GlJournal * gl_journal_new (void);
 gchar * gl_journal_get_current_boot_time (GlJournal *journal,
                                           const gchar *boot_match);
+void    gl_journal_go_to_start           (GlJournal *journal);
 
 guint64                 gl_journal_entry_get_timestamp                  (GlJournalEntry *entry);
 const gchar *           gl_journal_entry_get_message                    (GlJournalEntry *entry);
