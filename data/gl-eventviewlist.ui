@@ -48,9 +48,46 @@
                                             <style>
                                                 <class name="search-menu-button"/>
                                             </style>
-
-                                         </object>
-
+                                        </object>
+                                    </child>
+                                    <child>
+                                        <object class ="GtkPopoverMenu" id="search_menu_popover">
+                                            <child>
+                                              <object class="GtkBox" id="search_menu">
+                                                <property name="visible">True</property>
+                                                <property name="can_focus">False</property>
+                                                <property name="orientation">vertical</property>
+                                                    <child>
+                                                      <object class="GtkSeparator">
+                                                        <property name="visible">True</property>
+                                                        <property name="orientation">horizontal</property>
+                                                        <property name="margin-top">6</property>
+                                                        <property name="margin-bottom">6</property>
+                                                      </object>
+                                                    </child>
+                                                    <child>
+                                                      <object class="GtkLabel" id="parameter_label">
+                                                        <property name="visible">True</property>
+                                                        <property name="can_focus">False</property>
+                                                        <property name="halign">start</property>
+                                                        <property name="label" translatable="yes">Parameter</property>
+                                                        <property name="margin-start">6</property>
+                                                        <style>
+                                                          <class name="separator"/>
+                                                        </style>
+                                                      </object>
+                                                    </child>
+                                                    <child>
+                                                      <object class="GtkModelButton" id="pid_checkbox">
+                                                        <property name="visible">True</property>
+                                                        <property name="can_focus">True</property>
+                                                        <property name="text" translatable="yes" context="Sort Criterion" comments="This is used to sort by name in the toolbar view menu">_Name</property>
+                                                        <property name="action-name">win.pid-status</property>
+                                                      </object>
+                                                    </child>
+                                                </object>
+                                            </child>
+                                        </object>
                                     </child>
                             </object>
                         </child>

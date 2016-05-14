@@ -335,7 +335,7 @@ calculate_match (GlJournalEntry *entry,
     while (token_index < token_array->len)       /* iterate through the token array */
     {
         field_name = g_ptr_array_index (token_array, token_index);
-        g_print("field_name: %s\n", field_name);
+        //g_print("field_name: %s\n", field_name);
         token_index++;
 
         if (token_index == token_array->len)
@@ -345,7 +345,7 @@ calculate_match (GlJournalEntry *entry,
 
         field_value = g_ptr_array_index (token_array, token_index);
         token_index++;
-        g_print("field_value: %s\n", field_value);
+        //g_print("field_value: %s\n", field_value);
 
         if (case_sensetive)
         {
@@ -468,6 +468,18 @@ search_in_result (GlJournalEntry *entry,
     search_text_copy = g_strdup (search_text);
 
     token_array = tokenize_search_string (search_text_copy);
+
+    guint token_index = 0;
+    gchar *field_name;
+
+    /*  Print Token array */
+    while (token_index < token_array->len)
+    {
+        field_name = g_ptr_array_index (token_array, token_index);
+        g_print("token %d: %s\n", token_index, field_name);
+        token_index++;
+    }
+
     matches = calculate_match (entry, token_array, TRUE);
 
     g_ptr_array_free (token_array, TRUE);
@@ -532,6 +544,18 @@ listbox_search_filter_func (GtkListBoxRow *row,
             search_text_copy = g_strdup (priv->search_text);
 
             token_array = tokenize_search_string (search_text_copy);
+
+             guint token_index = 0;
+             gchar *field_name;
+
+             /*  Print Token array */
+            while (token_index < token_array->len)
+            {
+                field_name = g_ptr_array_index (token_array, token_index);
+                g_print("token %d: %s\n", token_index, field_name);
+                token_index++;
+            }
+
             matches = calculate_match (entry, token_array, FALSE);
 
             g_ptr_array_free (token_array, TRUE);
@@ -567,6 +591,8 @@ on_listbox_row_activated (GtkListBox *listbox,
         evalue = g_enum_get_value (eclass, GL_EVENT_VIEW_MODE_DETAIL);
 
         g_action_activate (mode, g_variant_new_string (evalue->value_nick));
+
+        gl_journal_model_set_search_text(priv->journal_model, "\0");
 
         g_type_class_unref (eclass);
     }
@@ -854,18 +880,39 @@ create_uid_match_string (void)
 }
 
 static void
-on_notify_category (GlCategoryList *list,
-                    GParamSpec *pspec,
-                    gpointer user_data)
+gl_query_add_category_matches (GlQuery *query, const gchar * const *matches)
 {
-    GlCategoryListFilter filter;
-    GlEventViewList *view;
-    GlEventViewListPrivate *priv;
-    GSettings *settings;
-    gint sort_order;
+    if(matches)
+    {
+        const char s[2]="=";
+        for (gint i = 0; matches[i]; i++)
+        {
 
-    view = GL_EVENT_VIEW_LIST (user_data);
-    priv = gl_event_view_list_get_instance_private (view);
+            gchar *field_name = strtok (g_strdup (matches[i]), s);
+            gchar *field_value = strtok (NULL, s);
+
+            gl_query_add_match (query, field_name, field_value, NULL, TRUE);
+        }
+    }
+}
+
+
+/* Create Query Object according to GUI elements and pass it on to Journal Model */
+/* Will add both Category and Search matches */
+/* if any change in GUI elements is made, the query object will change accordingly */
+static void
+create_query_object (GlJournalModel *model,
+                     GlCategoryList *list,
+                     gchar *search_text,
+                     const gchar *current_boot_match)
+{
+    GlQuery *query;
+    GlCategoryListFilter filter;
+
+    // Add Category Matches (Exact)
+
+    query = gl_journal_model_get_query(model);
+
     filter = gl_category_list_get_category (list);
 
     switch (filter)
@@ -873,19 +920,20 @@ on_notify_category (GlCategoryList *list,
         case GL_CATEGORY_LIST_FILTER_IMPORTANT:
             {
               /* Alert or emergency priority. */
-              const gchar * query[] = { "PRIORITY=0", "PRIORITY=1", "PRIORITY=2", "PRIORITY=3", NULL, NULL };
+              const gchar * match_query[] = { "PRIORITY=0", "PRIORITY=1", "PRIORITY=2", "PRIORITY=3", NULL, NULL };
 
-              query[4] = priv->boot_match;
-              gl_journal_model_set_matches (priv->journal_model, query);
+              match_query[4] = current_boot_match;
+              gl_query_add_category_matches(query, match_query);
+
             }
             break;
 
         case GL_CATEGORY_LIST_FILTER_ALL:
             {
-                const gchar *query[] = { NULL, NULL };
+                const gchar *match_query[] = { NULL, NULL };
 
-                query[0] = priv->boot_match;
-                gl_journal_model_set_matches (priv->journal_model, query);
+                match_query[0] = current_boot_match;
+                gl_query_add_category_matches(query, match_query);
             }
             break;
 
@@ -894,7 +942,7 @@ on_notify_category (GlCategoryList *list,
              * owned by the same UID. */
             {
                 gchar *uid_str = NULL;
-                const gchar *query[] = { "_TRANSPORT=journal",
+                const gchar *match_query[] = { "_TRANSPORT=journal",
                                          "_TRANSPORT=stdout",
                                          "_TRANSPORT=syslog",
                                          NULL,
@@ -902,9 +950,9 @@ on_notify_category (GlCategoryList *list,
                                          NULL };
 
                 uid_str = create_uid_match_string ();
-                query[3] = uid_str;
-                query[4] = priv->boot_match;
-                gl_journal_model_set_matches (priv->journal_model, query);
+                match_query[3] = uid_str;
+                match_query[4] = current_boot_match;
+                gl_query_add_category_matches(query, match_query);
 
                 g_free (uid_str);
             }
@@ -912,34 +960,59 @@ on_notify_category (GlCategoryList *list,
 
         case GL_CATEGORY_LIST_FILTER_SYSTEM:
             {
-                const gchar *query[] = { "_TRANSPORT=kernel", NULL, NULL };
+                const gchar *match_query[] = { "_TRANSPORT=kernel", NULL, NULL };
 
-                query[1] = priv->boot_match;
-                gl_journal_model_set_matches (priv->journal_model, query);
+                match_query[1] = current_boot_match;
+                gl_query_add_category_matches(query, match_query);
             }
             break;
 
         case GL_CATEGORY_LIST_FILTER_HARDWARE:
             {
-                const gchar *query[] = { "_TRANSPORT=kernel", "_KERNEL_DEVICE", NULL, NULL };
+                const gchar *match_query[] = { "_TRANSPORT=kernel", "_KERNEL_DEVICE", NULL, NULL };
 
-                query[2] = priv->boot_match;
-                gl_journal_model_set_matches (priv->journal_model, query);
+                match_query[2] = current_boot_match;
+                gl_query_add_category_matches(query, match_query);
             }
             break;
 
         case GL_CATEGORY_LIST_FILTER_SECURITY:
             {
-                const gchar *query[] = { "_AUDIT_SESSION", NULL, NULL };
+                const gchar *match_query[] = { "_AUDIT_SESSION", NULL, NULL };
 
-                query[1] = priv->boot_match;
-                gl_journal_model_set_matches (priv->journal_model, query);
+                match_query[1] = current_boot_match;
+                gl_query_add_category_matches(query, match_query);
             }
             break;
 
         default:
             g_assert_not_reached ();
     }
+
+    // Add Substring Matches (will be affected by checkboxes in future)
+    gl_query_add_match (query,"_MESSAGE",search_text,search_text,FALSE);
+    gl_query_add_match (query,"_COMM", search_text, search_text, FALSE);
+
+    // set the query object on the journal model
+    gl_journal_model_process_query(model);
+}
+
+static void
+on_notify_category (GlCategoryList *list,
+                    GParamSpec *pspec,
+                    gpointer user_data)
+{
+    GlEventViewList *view;
+    GlEventViewListPrivate *priv;
+    GSettings *settings;
+    gint sort_order;
+
+    view = GL_EVENT_VIEW_LIST (user_data);
+    priv = gl_event_view_list_get_instance_private (view);
+
+    g_print("search text: %s\n", priv->search_text);
+
+    create_query_object(priv->journal_model, list, priv->search_text, priv->boot_match);
 
     settings = g_settings_new (SETTINGS_SCHEMA);
     sort_order = g_settings_get_enum (settings, SORT_ORDER);
@@ -1052,65 +1125,16 @@ on_search_entry_changed (GtkSearchEntry *entry,
                          gpointer user_data)
 {
     GlEventViewListPrivate *priv;
+    GlCategoryList *categories;
 
     priv = gl_event_view_list_get_instance_private (GL_EVENT_VIEW_LIST (user_data));
 
-    gl_event_view_list_search (GL_EVENT_VIEW_LIST (user_data),
-                               gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
+    categories = GL_CATEGORY_LIST (priv->categories);
 
-    const gchar *query[] = { NULL, NULL };   // search parameters
+    g_free (priv->search_text);
+    priv->search_text = g_strdup (gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
 
-    query[0] = priv->boot_match;
-
-    if( gtk_entry_get_text_length ( GTK_ENTRY (priv->search_entry)) == 0)
-    {
-        //g_print("empty text\n");
-
-        gl_journal_model_set_matches (priv->journal_model, query);
-    }
-    else
-    {
-
-        //g_print("text changed\n");
-
-
-        gchar *search_text_copy = g_strdup (priv->search_text);
-
-        GPtrArray *token_array;
-        token_array = tokenize_search_string (search_text_copy);
-
-        gl_journal_model_search_init (priv->journal_model, search_text_copy, checkbox_value);
-
-        // I will have to write a function similar to calculate_match() which will filter the journal-model
-        // to the tokens.
-
-        // get all the tokens in the string
-
-        // check for all the tokens which are matching the parameters selected in the checkboxes
-
-        // all journal-model modifying functions can be written in journal-model module and can be called here...
-
-        /*
-        if(priv->pid_status == TRUE)
-        {
-            query[1] = g_strdup_printf ("_PID=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
-        }
-
-        if(priv->process_name_status == TRUE)
-        {
-            query[1] = g_strdup_printf ("_COMM=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
-        }
-
-        if(priv->message_status == TRUE)
-        {
-            query[1] = g_strdup_printf ("MESSAGE=%s", gtk_entry_get_text (GTK_ENTRY (priv->search_entry)));
-        }
-
-        gl_journal_model_set_matches (priv->journal_model, query);
-        */
-
-    }
-
+    create_query_object (priv->journal_model, categories, priv->search_text, priv->boot_match);
 
 }
 
@@ -1152,16 +1176,7 @@ gl_event_list_view_edge_reached (GtkScrolledWindow *scrolled,
 
     if (pos == GTK_POS_BOTTOM)
     {
-        if(gtk_search_bar_get_search_mode (GTK_SEARCH_BAR (priv->event_search)) == TRUE)
-        {
-
-        gl_journal_model_fetch_more_entries (priv->journal_model, FALSE, TRUE);
-
-        }
-        else
-        {
-            gl_journal_model_fetch_more_entries (priv->journal_model, FALSE, FALSE);
-        }
+            gl_journal_model_fetch_more_entries (priv->journal_model, FALSE);
     }
 }
 
@@ -1212,9 +1227,9 @@ gl_event_view_list_class_init (GlEventViewListClass *klass)
 }
 
 static GActionEntry actions[] = {
-    { "pid-status", NULL, NULL, "false", action_pid_status },
-    { "processname-status", NULL, NULL, "false", action_processname_status },
-    { "message-status", NULL, NULL, "false", action_message_status }
+    { "pid-status", NULL, NULL, "true", action_pid_status },
+    { "processname-status", NULL, NULL, "true", action_processname_status },
+    { "message-status", NULL, NULL, "true", action_message_status }
 };
 
 static void
@@ -1297,9 +1312,9 @@ gl_event_view_list_search (GlEventViewList *view,
     priv->search_text = g_strdup (needle);
 
     /* for search, we need all entries - tell the model to fetch them */
-    gl_journal_model_fetch_more_entries (priv->journal_model, TRUE, TRUE);
+    gl_journal_model_fetch_more_entries (priv->journal_model, TRUE);
 
-    gtk_list_box_invalidate_filter (priv->entries_box);
+    //gtk_list_box_invalidate_filter (priv->entries_box);
 }
 
 GtkWidget *
