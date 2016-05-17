@@ -62,9 +62,6 @@ gchar *                 gl_journal_model_get_current_boot_time          (GlJourn
 void					gl_journal_model_search_init 				    (GlJournalModel *model,
                                   										 gchar *search_string,
                                   										 gboolean parameters[]);
-void					gl_journal_model_calculate_exact_match			(GlJournalModel *model,
-                                       									 gchar *search_string);
-void					gl_journal_model_set_search_text				(GlJournalModel *model, gchar *search_text);
 
 void gl_query_add_match (GlQuery *query,gchar *field_name, gchar *field_value, gchar *search_text, gboolean search_type);
 

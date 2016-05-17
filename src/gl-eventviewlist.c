@@ -592,8 +592,6 @@ on_listbox_row_activated (GtkListBox *listbox,
 
         g_action_activate (mode, g_variant_new_string (evalue->value_nick));
 
-        gl_journal_model_set_search_text(priv->journal_model, "\0");
-
         g_type_class_unref (eclass);
     }
     else
@@ -989,9 +987,14 @@ create_query_object (GlJournalModel *model,
             g_assert_not_reached ();
     }
 
-    // Add Substring Matches (will be affected by checkboxes in future)
+    if(!search_text)
+        search_text="\0";
+
+    // Add Substring Matches (will be affected by checkboxes or radioboxes in future)
     gl_query_add_match (query,"_MESSAGE",search_text,search_text,FALSE);
     gl_query_add_match (query,"_COMM", search_text, search_text, FALSE);
+    gl_query_add_match (query,"_KERNEL_DEVICE", search_text, search_text, FALSE);
+    gl_query_add_match (query,"_AUDIT_SESSION", search_text, search_text, FALSE);
 
     // set the query object on the journal model
     gl_journal_model_process_query(model);
@@ -1009,8 +1012,6 @@ on_notify_category (GlCategoryList *list,
 
     view = GL_EVENT_VIEW_LIST (user_data);
     priv = gl_event_view_list_get_instance_private (view);
-
-    g_print("search text: %s\n", priv->search_text);
 
     create_query_object(priv->journal_model, list, priv->search_text, priv->boot_match);
 

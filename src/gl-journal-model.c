@@ -56,8 +56,8 @@ struct _GlJournalModel
 };
 
 static void gl_journal_model_interface_init (GListModelInterface *iface);
-static gboolean gl_journal_model_calculate_match (GlJournalEntry *entry,
-                                  gchar *search_text);
+static gboolean gl_journal_model_calculate_match (GlJournalEntry *entry, GlQuery *query);
+static gboolean search_in_entry (GlJournalEntry *entry, GlQuery *query);
 
 G_DEFINE_TYPE_WITH_CODE (GlJournalModel, gl_journal_model, G_TYPE_OBJECT,
                          G_IMPLEMENT_INTERFACE (G_TYPE_LIST_MODEL, gl_journal_model_interface_init))
@@ -77,11 +77,11 @@ enum
     SEARCH_TYPE_SUBSTRING
 };
 
-enum
+typedef enum
 {
-    LOGICAL_OR,
-    LOGICAL_AND
-};
+    LOGICAL_OR = 2,
+    LOGICAL_AND = 3
+} GlQueryLogic;
 
 static GParamSpec *properties[N_PROPERTIES];
 
@@ -92,17 +92,13 @@ gl_journal_model_fetch_idle (gpointer user_data)
     GlJournalEntry *entry;
     guint last;
 
-    g_print("n_entries_to_fetch_idle: %d\n", model->n_entries_to_fetch);
-
     g_assert (model->n_entries_to_fetch > 0);
 
     last = model->entries->len;
     if ((entry = gl_journal_previous (model->journal)))
     {
-        g_print("model-search-text: %s\n", model->search_text);
-        if(model->search_text && gl_journal_model_calculate_match(entry, model->search_text))
+        if(search_in_entry (entry, model->query))
         {
-            g_print("model-search-text: %s\n", model->search_text);
             model->n_entries_to_fetch--;
             g_ptr_array_add (model->entries, entry);
             g_list_model_items_changed (G_LIST_MODEL (model), last, 0, 1);
@@ -312,6 +308,31 @@ gl_query_get_exact_matches (GlQuery *query)
     return matches;
 }
 
+static GArray *
+gl_query_get_substring_matches (GlQuery *query)
+{
+    GlQueryPrivate *priv;
+    GlQueryItem *queryitem;
+    GArray *matches;
+    gint i;
+
+    priv = gl_query_get_instance_private(query);
+
+    matches = g_array_new(FALSE, FALSE, sizeof (GlQueryItem *));
+
+    for(i=0; i < priv->queryitems->len ;i++)
+    {
+        queryitem = g_ptr_array_index (priv->queryitems, i);
+
+        if(queryitem->search_type == FALSE)
+        {
+            g_array_append_val (matches, queryitem);
+        }
+    }
+
+    return matches;
+}
+
 /**
  * gl_journal_model_set_matches:
  * @model: a #GlJournalModel
@@ -341,76 +362,6 @@ gl_journal_model_process_query (GlJournalModel      *model)
     gl_journal_model_fetch_more_entries (model, FALSE);
 }
 
-// Now, in the naive stage , we just assume that there is only one single string present meaning only single token
-// Also, first I will implement it for just message field and try to evaluate it's performance.
-// we populate the journal model entries according to search parameters in this function.
-void
-gl_journal_model_search_init (GlJournalModel *model,
-                              gchar *search_string,
-                              gboolean *parameters)
-{
-    gint i;
-
-    g_return_if_fail (GL_IS_JOURNAL_MODEL (model));
-
-    gl_journal_model_stop_idle (model);
-
-    model->fetched_all = FALSE;
-    if (model->entries->len > 0)
-    {
-        g_list_model_items_changed (G_LIST_MODEL (model), 0, model->entries->len, 0);
-        g_ptr_array_remove_range (model->entries, 0, model->entries->len);
-    }
-
-    /* populate the entries pointer array according to the search_string */
-
-    gl_journal_go_to_start(model->journal);
-
-    model->search_text = search_string;
-
-    gl_journal_model_fetch_more_entries(model, FALSE);
-
-
-}
-
-// function used to return if the journal entry entry contains any matching string from the search text
-/*static gboolean
-gl_journal_model_calculate_match (GlJournalEntry *entry, gchar *search_string)
-{
-
-    const gchar *process_name;
-    const gchar *message;
-
-    process_name = gl_journal_entry_get_command_line (entry);
-    message = gl_journal_entry_get_message (entry);
-
-   /* if((journal_checkbox_value[PROCESS_NAME] ? strstr (process_name, search_string) : NULL)
-       || (journal_checkbox_value[MESSAGE] ? strstr (message, search_string) : NULL))
-    {
-        return TRUE;
-    }
-    else*/
-//        return FALSE;
-//}
-
-// other function for calculating exact matches....in this we can simply use gl_journal_model_set_matches() function
-// to set the matches
-
-void
-gl_journal_model_set_search_text(GlJournalModel *model, gchar *search_text)
-{
-    model->search_text = search_text;
-}
-
-void
-gl_journal_model_calculate_exact_match(GlJournalModel *model,
-                                       gchar *search_string)
-{
-    g_ptr_array_free (model->entries, TRUE);
-    model->entries = NULL;
-
-}
-
 gchar *
 gl_journal_model_get_current_boot_time (GlJournalModel *model,
                                         const gchar *boot_match)
@@ -424,21 +375,114 @@ gl_journal_model_get_boot_ids (GlJournalModel *model)
     return gl_journal_get_boot_ids (model->journal);
 }
 
-static gboolean
-gl_journal_model_calculate_match (GlJournalEntry *entry,
-                                  gchar *search_text)
+static GPtrArray *
+tokenize_search_string (gchar *search_text)
 {
+    gchar *field_name;
+    gchar *field_value;
+    GPtrArray *token_array;
+    GScanner *scanner;
+
+    token_array = g_ptr_array_new_with_free_func (g_free);
+    scanner = g_scanner_new (NULL);
+    scanner->config->cset_skip_characters = " =\t\n";
+    g_scanner_input_text (scanner, search_text, strlen (search_text));
+
+    do
+    {
+        g_scanner_get_next_token (scanner);
+        if (scanner->value.v_identifier == NULL && scanner->token != '+')
+        {
+            break;
+        }
+        else if (scanner->token == '+')
+        {
+            g_ptr_array_add (token_array, g_strdup ("+"));
+
+            g_scanner_get_next_token (scanner);
+            if (scanner->value.v_identifier != NULL)
+            {
+                field_name = g_strdup (scanner->value.v_identifier);
+                g_ptr_array_add (token_array, field_name);
+            }
+            else
+            {
+                field_name = NULL;
+            }
+        }
+        else if (scanner->token == G_TOKEN_INT)
+        {
+            field_name = g_strdup_printf ("%lu", scanner->value.v_int);
+            g_ptr_array_add (token_array, field_name);
+        }
+        else if (scanner->token == G_TOKEN_FLOAT)
+        {
+            field_name = g_strdup_printf ("%g", scanner->value.v_float);
+            g_ptr_array_add (token_array, field_name);
+        }
+        else if (scanner->token == G_TOKEN_IDENTIFIER)
+        {
+            if (token_array->len != 0)
+            {
+                g_ptr_array_add (token_array, g_strdup (" "));
+            }
+
+            field_name = g_strdup (scanner->value.v_identifier);
+            g_ptr_array_add (token_array, field_name);
+        }
+        else
+        {
+            field_name = NULL;
+        }
+
+        g_scanner_get_next_token (scanner);
+        if (scanner->token == G_TOKEN_INT)
+        {
+            field_value = g_strdup_printf ("%lu", scanner->value.v_int);
+            g_ptr_array_add (token_array, field_value);
+        }
+        else if (scanner->token == G_TOKEN_FLOAT)
+        {
+            field_value = g_strdup_printf ("%g", scanner->value.v_float);
+            g_ptr_array_add (token_array, field_value);
+        }
+        else if (scanner->token == G_TOKEN_IDENTIFIER)
+        {
+            field_value = g_strdup (scanner->value.v_identifier);
+            g_ptr_array_add (token_array, field_value);
+        }
+        else
+        {
+            field_value = NULL;
+        }
+    } while (field_name != NULL && field_value != NULL);
+
+    g_scanner_destroy (scanner);
+
+    return token_array;
+}
+
+static gboolean
+calculate_match_token (GlJournalEntry *entry,
+                       GPtrArray *token_array,
+                       GArray *queryitems)
+{
+    GlQueryItem *queryitem;
+
     const gchar *comm;
     const gchar *message;
     const gchar *kernel_device;
     const gchar *audit_session;
-    gboolean matches;
+
     gchar *field_name;
     gchar *field_value;
-    gint i;
+
+    gboolean matches;
     gint match_stack[10];
     guint match_count = 0;
     guint token_index = 0;
+
+    gint i;
 
     comm = gl_journal_entry_get_command_line (entry);
     message = gl_journal_entry_get_message (entry);
@@ -446,19 +490,159 @@ gl_journal_model_calculate_match (GlJournalEntry *entry,
     audit_session = gl_journal_entry_get_audit_session (entry);
 
     /* No logical AND or OR used in search text */
+    if(token_array->len == 1)
+    {
+        matches = FALSE;
 
-        if ((comm ? strstr (comm, search_text) : NULL)
-            || (message ? strstr (message, search_text) : NULL)
-            || (kernel_device ? strstr (kernel_device, search_text) : NULL)
-            || (audit_session ? strstr (audit_session, search_text) : NULL))
+        for(i=0; i < queryitems->len ;i++)
         {
-            return TRUE;
+            queryitem = g_array_index (queryitems,GlQueryItem *,i);
+
+
+            if(((strstr("_MESSAGE", queryitem->field_name) && message) ? strstr(message, queryitem->field_value) : NULL)
+                || ((strstr("_COMM", queryitem->field_name) && comm) ? strstr(comm, queryitem->field_value) : NULL)
+                || ((strstr("_KERNEL_DEVICE", queryitem->field_name) && kernel_device) ? strstr(kernel_device, queryitem->field_value) : NULL)
+                || ((strstr("_AUDIT_SESSION", queryitem->field_name) && audit_session) ? strstr(audit_session, queryitem->field_value) : NULL))
+            {
+                matches = TRUE;
+            }
         }
-        else
+
+        return matches;
+    }
+
+    while (token_index < token_array->len)       /* iterate through the token array */
+    {
+        //g_print("entered token loop\n");
+        field_name = g_ptr_array_index (token_array, token_index);
+        //g_print("field_name: %s\n", field_name);
+        token_index++;
+
+        if (token_index == token_array->len)
         {
-            return FALSE;
+            break;
         }
+
+        field_value = g_ptr_array_index (token_array, token_index);
+        token_index++;
+        
+        matches = (strstr ("_COMM", field_name) &&
+                   comm &&
+                   strstr (comm, field_value)) ||
+                  (strstr ("_MESSAGE", field_name) &&
+                   message &&
+                   strstr (message, field_value)) ||
+                  (strstr ("_KERNEL_DEVICE", field_name) &&
+                   kernel_device &&
+                   strstr (kernel_device, field_value)) ||
+                  (strstr ("_AUDIT_SESSION", field_name) &&
+                   audit_session &&
+                   strstr (audit_session, field_value));
+
+        match_stack[match_count] = matches;
+        match_count++;
+
+        if (token_index == token_array->len)
+        {
+            break;
+        }
+
+        if (g_strcmp0 (g_ptr_array_index (token_array, token_index), " ") == 0)
+        {
+            match_stack[match_count] = LOGICAL_AND;
+            match_count++;
+            token_index++;
+        }
+        else if (g_strcmp0 (g_ptr_array_index (token_array, token_index),
+                            "+") == 0)
+        {
+            match_stack[match_count] = LOGICAL_OR;
+            match_count++;
+            token_index++;
+        }
+    }
+
+    /* match_count > 2 means there are still matches to be calculated in the
+     * stack */
+    if (match_count > 2)
+    {
+        /* calculate the expression with logical AND */
+        for (i = 0; i < match_count; i++)
+        {
+            if (match_stack[i] == LOGICAL_AND)
+            {
+                int j;
+
+                match_stack[i - 1] = match_stack[i - 1] && match_stack[i + 1];
+
+                for (j = i; j < match_count - 2; j++)
+                {
+                    if (j == match_count - 3)
+                    {
+                        match_stack[j] = match_stack[j + 2];
+                        /* We use -1 to represent the values that are not
+                         * useful */
+                        match_stack[j + 1] = -1;
+
+                        break;
+                    }
+
+                    match_stack[j] = match_stack[j + 2];
+                    match_stack[j + 2] = -1;
+                }
+            }
+        }
+
+        /* calculate the expression with logical OR */
+        for (i = 0; i < match_count; i++)
+        {
+            /* We use -1 to represent the values that are not useful */
+            if ((match_stack[i] == LOGICAL_OR) && (i != token_index - 1) &&
+                (match_stack[i + 1] != -1))
+            {
+                int j;
+
+                match_stack[i - 1] = match_stack[i - 1] || match_stack[i + 1];
+
+                for (j = i; j < match_count - 2; j++)
+                {
+                    match_stack[j] = match_stack[j + 2];
+                    match_stack[j + 2] = -1;
+                }
+            }
+        }
+    }
+
+    matches = match_stack[0];
+
+    return matches;
 }
+
+static gboolean
+search_in_entry (GlJournalEntry *entry,
+                 GlQuery *query)
+{
+    GlQueryItem *queryitem;
+    gboolean matches;
+    gchar *search_text_copy;
+    GArray *queryitems;
+    GPtrArray *token_array;
+
+    queryitems = gl_query_get_substring_matches(query);
+
+    queryitem = g_array_index (queryitems, GlQueryItem *, 0);
+
+    search_text_copy = g_strdup (queryitem->field_value);
+
+    token_array = tokenize_search_string (search_text_copy);
+
+    matches = calculate_match_token (entry, token_array, queryitems);
+
+    g_ptr_array_free (token_array, TRUE);
+
+    return matches;
+}
+
 
 /**
  * gl_journal_model_get_loading:
