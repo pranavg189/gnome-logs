@@ -151,9 +151,9 @@ gl_event_view_list_get_output_logs (GlEventViewList *view)
 }
 
 static gboolean
-gl_event_view_search_is_case_sensitive (gchar *user_text)
+search_is_case_sensitive (gchar *user_text)
 {
-    
+
     const gchar *search_text;
 
     for (search_text = user_text; search_text && *search_text;
@@ -170,319 +170,6 @@ gl_event_view_search_is_case_sensitive (gchar *user_text)
     }
 
     return FALSE;
-}
-
-static gboolean
-utf8_strcasestr (const gchar *potential_hit,
-                 const gchar *search_term)
-{
-  gchar *folded;
-  gboolean matches;
-
-  folded = g_utf8_casefold (potential_hit, -1);
-  matches = strstr (folded, search_term) != NULL;
-
-  g_free (folded);
-  return matches;
-}
-
-static GPtrArray *
-tokenize_search_string (gchar *search_text)
-{
-    gchar *field_name;
-    gchar *field_value;
-    GPtrArray *token_array;
-    GScanner *scanner;
-
-    token_array = g_ptr_array_new_with_free_func (g_free);
-    scanner = g_scanner_new (NULL);
-    scanner->config->cset_skip_characters = " =\t\n";
-    g_scanner_input_text (scanner, search_text, strlen (search_text));
-
-    do
-    {
-        g_scanner_get_next_token (scanner);
-        if (scanner->value.v_identifier == NULL && scanner->token != '+')
-        {
-            break;
-        }
-        else if (scanner->token == '+')
-        {
-            g_ptr_array_add (token_array, g_strdup ("+"));
-
-            g_scanner_get_next_token (scanner);
-            if (scanner->value.v_identifier != NULL)
-            {
-                field_name = g_strdup (scanner->value.v_identifier);
-                g_ptr_array_add (token_array, field_name);
-            }
-            else
-            {
-                field_name = NULL;
-            }
-        }
-        else if (scanner->token == G_TOKEN_INT)
-        {
-            field_name = g_strdup_printf ("%lu", scanner->value.v_int);
-            g_ptr_array_add (token_array, field_name);
-        }
-        else if (scanner->token == G_TOKEN_FLOAT)
-        {
-            field_name = g_strdup_printf ("%g", scanner->value.v_float);
-            g_ptr_array_add (token_array, field_name);
-        }
-        else if (scanner->token == G_TOKEN_IDENTIFIER)
-        {
-            if (token_array->len != 0)
-            {
-                g_ptr_array_add (token_array, g_strdup (" "));
-            }
-
-            field_name = g_strdup (scanner->value.v_identifier);
-            g_ptr_array_add (token_array, field_name);
-        }
-        else
-        {
-            field_name = NULL;
-        }
-
-        g_scanner_get_next_token (scanner);
-        if (scanner->token == G_TOKEN_INT)
-        {
-            field_value = g_strdup_printf ("%lu", scanner->value.v_int);
-            g_ptr_array_add (token_array, field_value);
-        }
-        else if (scanner->token == G_TOKEN_FLOAT)
-        {
-            field_value = g_strdup_printf ("%g", scanner->value.v_float);
-            g_ptr_array_add (token_array, field_value);
-        }
-        else if (scanner->token == G_TOKEN_IDENTIFIER)
-        {
-            field_value = g_strdup (scanner->value.v_identifier);
-            g_ptr_array_add (token_array, field_value);
-        }
-        else
-        {
-            field_value = NULL;
-        }
-    } while (field_name != NULL && field_value != NULL);
-
-    g_scanner_destroy (scanner);
-
-    return token_array;
-}
-
-static gboolean
-calculate_match (GlJournalEntry *entry,
-                 GPtrArray *token_array,
-                 gboolean case_sensetive)
-{
-    const gchar *comm;
-    const gchar *message;
-    const gchar *kernel_device;
-    const gchar *audit_session;
-    gboolean matches;
-    gchar *field_name;
-    gchar *field_value;
-    gint i;
-    gint match_stack[10];
-    guint match_count = 0;
-    guint token_index = 0;
-
-    comm = gl_journal_entry_get_command_line (entry);
-    message = gl_journal_entry_get_message (entry);
-    kernel_device = gl_journal_entry_get_kernel_device (entry);
-    audit_session = gl_journal_entry_get_audit_session (entry);
-
-    /* No logical AND or OR used in search text */
-    if (token_array->len == 1 && case_sensetive == TRUE)
-    {
-        gchar *search_text;
-
-        search_text = g_ptr_array_index (token_array, 0);
-
-        if ((comm ? strstr (comm, search_text) : NULL)
-            || (message ? strstr (message, search_text) : NULL)
-            || (kernel_device ? strstr (kernel_device, search_text) : NULL)
-            || (audit_session ? strstr (audit_session, search_text) : NULL))
-        {
-            return TRUE;
-        }
-        else
-        {
-            return FALSE;
-        }
-    }
-    else if (token_array->len == 1 && case_sensetive == FALSE)
-    {
-        gchar *search_text;
-
-        search_text = g_ptr_array_index (token_array, 0);
-
-        matches = (comm && utf8_strcasestr (comm, search_text)) ||
-                  (message && utf8_strcasestr (message, search_text)) ||
-                  (kernel_device && utf8_strcasestr (kernel_device, search_text)) ||
-                  (audit_session && utf8_strcasestr (audit_session, search_text));
-
-        return matches;
-    }
-
-
-    /* if Logical AND or OR used in search text */
-    while (token_index < token_array->len)       /* iterate through the token array */
-    {
-        field_name = g_ptr_array_index (token_array, token_index);
-        //g_print("field_name: %s\n", field_name);
-        token_index++;
-
-        if (token_index == token_array->len)
-        {
-            break;
-        }
-
-        field_value = g_ptr_array_index (token_array, token_index);
-        token_index++;
-        //g_print("field_value: %s\n", field_value);
-
-        if (case_sensetive)
-        {
-            matches = (strstr ("_COMM", field_name) &&
-                       comm &&
-                       strstr (comm, field_value)) ||
-                      (strstr ("_MESSAGE", field_name) &&
-                       message &&
-                       strstr (message, field_value)) ||
-                      (strstr ("_KERNEL_DEVICE", field_name) &&
-                       kernel_device &&
-                       strstr (kernel_device, field_value)) ||
-                      (strstr ("_AUDIT_SESSION", field_name) &&
-                       audit_session &&
-                       strstr (audit_session, field_value));
-        }
-        else
-        {
-            matches = (utf8_strcasestr ("_comm", field_name) &&
-                       comm &&
-                       strstr (comm, field_value)) ||
-                      (utf8_strcasestr ("_message", field_name) &&
-                       message &&
-                       strstr (message, field_value)) ||
-                      (utf8_strcasestr ("_kernel_device", field_name) &&
-                       kernel_device &&
-                       strstr (kernel_device, field_value)) ||
-                      (utf8_strcasestr ("_audit_session", field_name) &&
-                       audit_session &&
-                       strstr (audit_session, field_value));
-        }
-
-        match_stack[match_count] = matches;
-        match_count++;
-
-        if (token_index == token_array->len)
-        {
-            break;
-        }
-
-        if (g_strcmp0 (g_ptr_array_index (token_array, token_index), " ") == 0)
-        {
-            match_stack[match_count] = LOGICAL_AND;
-            match_count++;
-            token_index++;
-        }
-        else if (g_strcmp0 (g_ptr_array_index (token_array, token_index),
-                            "+") == 0)
-        {
-            match_stack[match_count] = LOGICAL_OR;
-            match_count++;
-            token_index++;
-        }
-    }
-
-    /* match_count > 2 means there are still matches to be calculated in the
-     * stack */
-    if (match_count > 2)
-    {
-        /* calculate the expression with logical AND */
-        for (i = 0; i < match_count; i++)
-        {
-            if (match_stack[i] == LOGICAL_AND)
-            {
-                int j;
-
-                match_stack[i - 1] = match_stack[i - 1] && match_stack[i + 1];
-
-                for (j = i; j < match_count - 2; j++)
-                {
-                    if (j == match_count - 3)
-                    {
-                        match_stack[j] = match_stack[j + 2];
-                        /* We use -1 to represent the values that are not
-                         * useful */
-                        match_stack[j + 1] = -1;
-
-                        break;
-                    }
-
-                    match_stack[j] = match_stack[j + 2];
-                    match_stack[j + 2] = -1;
-                }
-            }
-        }
-
-        /* calculate the expression with logical OR */
-        for (i = 0; i < match_count; i++)
-        {
-            /* We use -1 to represent the values that are not useful */
-            if ((match_stack[i] == LOGICAL_OR) && (i != token_index - 1) &&
-                (match_stack[i + 1] != -1))
-            {
-                int j;
-
-                match_stack[i - 1] = match_stack[i - 1] || match_stack[i + 1];
-
-                for (j = i; j < match_count - 2; j++)
-                {
-                    match_stack[j] = match_stack[j + 2];
-                    match_stack[j + 2] = -1;
-                }
-            }
-        }
-    }
-
-    matches = match_stack[0];
-
-    return matches;
-}
-
-static gboolean
-search_in_result (GlJournalEntry *entry,
-                  const gchar *search_text)
-{
-    gboolean matches;
-    gchar *search_text_copy;
-    GPtrArray *token_array;
-
-    search_text_copy = g_strdup (search_text);
-
-    token_array = tokenize_search_string (search_text_copy);
-
-    guint token_index = 0;
-    gchar *field_name;
-
-    /*  Print Token array */
-    while (token_index < token_array->len)
-    {
-        field_name = g_ptr_array_index (token_array, token_index);
-        g_print("token %d: %s\n", token_index, field_name);
-        token_index++;
-    }
-
-    matches = calculate_match (entry, token_array, TRUE);
-
-    g_ptr_array_free (token_array, TRUE);
-
-    return matches;
 }
 
 static void
@@ -506,63 +193,6 @@ listbox_update_header_func (GtkListBoxRow *row,    // draws a GtkSeperator on th
         gtk_widget_show (current);
         gtk_list_box_row_set_header (row, current);
     }
-}
-
-static gboolean
-listbox_search_filter_func (GtkListBoxRow *row,
-                            GlEventViewList *view)
-{
-    GlEventViewListPrivate *priv;
-
-    priv = gl_event_view_list_get_instance_private (view);
-
-    if (!priv->search_text || !*(priv->search_text))
-    {
-        return TRUE;
-    }
-    else
-    {
-        GlJournalEntry *entry;
-
-        entry = gl_event_view_row_get_entry (GL_EVENT_VIEW_ROW (row));
-
-        if (gl_event_view_search_is_case_sensitive (view))
-        {
-            if (search_in_result (entry, priv->search_text))
-            {
-                return TRUE;
-            }
-        }
-        else
-        {
-            gboolean matches;
-            gchar *search_text_copy;
-            GPtrArray *token_array;
-
-            search_text_copy = g_strdup (priv->search_text);
-
-            token_array = tokenize_search_string (search_text_copy);
-
-             guint token_index = 0;
-             gchar *field_name;
-
-             /*  Print Token array */
-            while (token_index < token_array->len)
-            {
-                field_name = g_ptr_array_index (token_array, token_index);
-                g_print("token %d: %s\n", token_index, field_name);
-                token_index++;
-            }
-
-            matches = calculate_match (entry, token_array, FALSE);
-
-            g_ptr_array_free (token_array, TRUE);
-
-            return matches;
-        }
-    }
-
-    return FALSE;
 }
 
 static void
@@ -887,11 +517,10 @@ gl_query_add_category_matches (GlQuery *query, const gchar * const *matches)
             gchar *field_name = strtok (g_strdup (matches[i]), s);
             gchar *field_value = strtok (NULL, s);
 
-            gl_query_add_match (query, field_name, field_value, SEARCH_TYPE_EXACT, NULL);
+            gl_query_add_match (query, field_name, field_value, SEARCH_TYPE_EXACT, FALSE);
         }
     }
 }
-
 
 /* Create Query Object according to GUI elements and pass it on to Journal Model */
 /* Will add both Category and Search matches */
@@ -990,7 +619,7 @@ create_query_object (GlJournalModel *model,
         search_text="\0";
 
     /* Check case sensitivity */
-    case_sensetive = gl_event_view_search_is_case_sensitive(search_text);
+    case_sensetive = search_is_case_sensitive(search_text);
 
 
     /* Add Substring Matches (will be affected by checkboxes or radioboxes in future) */
