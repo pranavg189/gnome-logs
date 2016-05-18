@@ -69,7 +69,7 @@ void					gl_journal_model_search_init 				    (GlJournalModel *model,
                                   										 gchar *search_string,
                                   										 gboolean parameters[]);
 
-void gl_query_add_match (GlQuery *query,gchar *field_name, gchar *field_value, GlQuerySearchType search_type);
+void gl_query_add_match (GlQuery *query,gchar *field_name, gchar *field_value, GlQuerySearchType search_type, gboolean case_sensitive);
 
 GlQuery * 				gl_journal_model_get_query						(GlJournalModel *model);
 

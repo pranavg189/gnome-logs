@@ -151,14 +151,12 @@ gl_event_view_list_get_output_logs (GlEventViewList *view)
 }
 
 static gboolean
-gl_event_view_search_is_case_sensitive (GlEventViewList *view)
+gl_event_view_search_is_case_sensitive (gchar *user_text)
 {
-    GlEventViewListPrivate *priv;
+    
     const gchar *search_text;
 
-    priv = gl_event_view_list_get_instance_private (view);
-
-    for (search_text = priv->search_text; search_text && *search_text;
+    for (search_text = user_text; search_text && *search_text;
          search_text = g_utf8_next_char (search_text))
     {
         gunichar c;
@@ -889,7 +887,7 @@ gl_query_add_category_matches (GlQuery *query, const gchar * const *matches)
             gchar *field_name = strtok (g_strdup (matches[i]), s);
             gchar *field_value = strtok (NULL, s);
 
-            gl_query_add_match (query, field_name, field_value, SEARCH_TYPE_EXACT);
+            gl_query_add_match (query, field_name, field_value, SEARCH_TYPE_EXACT, NULL);
         }
     }
 }
@@ -906,7 +904,7 @@ create_query_object (GlJournalModel *model,
 {
     GlQuery *query;
     GlCategoryListFilter filter;
-
+    gboolean case_sensetive;
     // Add Category Matches (Exact)
 
     query = gl_journal_model_get_query(model);
@@ -987,16 +985,21 @@ create_query_object (GlJournalModel *model,
             g_assert_not_reached ();
     }
 
+    /* Initial search text */
     if(!search_text)
         search_text="\0";
 
-    // Add Substring Matches (will be affected by checkboxes or radioboxes in future)
-    gl_query_add_match (query,"_MESSAGE",search_text, SEARCH_TYPE_SUBSTRING);
-    gl_query_add_match (query,"_COMM", search_text, SEARCH_TYPE_SUBSTRING);
-    gl_query_add_match (query,"_KERNEL_DEVICE", search_text, SEARCH_TYPE_SUBSTRING);
-    gl_query_add_match (query,"_AUDIT_SESSION", search_text, SEARCH_TYPE_SUBSTRING);
+    /* Check case sensitivity */
+    case_sensetive = gl_event_view_search_is_case_sensitive(search_text);
 
-    // set the query object on the journal model
+
+    /* Add Substring Matches (will be affected by checkboxes or radioboxes in future) */
+    gl_query_add_match (query,"_MESSAGE",search_text, SEARCH_TYPE_SUBSTRING, case_sensetive);
+    gl_query_add_match (query,"_COMM", search_text, SEARCH_TYPE_SUBSTRING, case_sensetive);
+    gl_query_add_match (query,"_KERNEL_DEVICE", search_text, SEARCH_TYPE_SUBSTRING, case_sensetive);
+    gl_query_add_match (query,"_AUDIT_SESSION", search_text, SEARCH_TYPE_SUBSTRING, case_sensetive);
+
+    /* set the query object on the journal model */
     gl_journal_model_process_query(model);
 }
 

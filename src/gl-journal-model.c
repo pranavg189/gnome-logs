@@ -363,6 +363,20 @@ gl_journal_model_get_boot_ids (GlJournalModel *model)
     return gl_journal_get_boot_ids (model->journal);
 }
 
+static gboolean
+utf8_strcasestr (const gchar *potential_hit,
+                 const gchar *search_term)
+{
+  gchar *folded;
+  gboolean matches;
+
+  folded = g_utf8_casefold (potential_hit, -1);
+  matches = strstr (folded, search_term) != NULL;
+
+  g_free (folded);
+  return matches;
+}
+
 static GPtrArray *
 tokenize_search_string (gchar *search_text)
 {
@@ -453,7 +467,8 @@ tokenize_search_string (gchar *search_text)
 static gboolean
 calculate_match_token (GlJournalEntry *entry,
                        GPtrArray *token_array,
-                       GArray *queryitems)
+                       GArray *queryitems,
+                       gboolean case_sensetive)
 {
     GlQueryItem *queryitem;
 
@@ -478,7 +493,28 @@ calculate_match_token (GlJournalEntry *entry,
     audit_session = gl_journal_entry_get_audit_session (entry);
 
     /* No logical AND or OR used in search text */
-    if(token_array->len == 1)
+    if(token_array->len == 1 && case_sensetive == TRUE)
+    {
+        matches = FALSE;
+
+        /* below loop can be made as seperate function */
+        for(i=0; i < queryitems->len ;i++)
+        {
+            queryitem = g_array_index (queryitems,GlQueryItem *,i);
+
+            /* will need to way to eliminate these big if statments */
+            if(((strstr("_MESSAGE", queryitem->field_name) && message) ? strstr(message, queryitem->field_value) : NULL)
+                || ((strstr("_COMM", queryitem->field_name) && comm) ? strstr(comm, queryitem->field_value) : NULL)
+                || ((strstr("_KERNEL_DEVICE", queryitem->field_name) && kernel_device) ? strstr(kernel_device, queryitem->field_value) : NULL)
+                || ((strstr("_AUDIT_SESSION", queryitem->field_name) && audit_session) ? strstr(audit_session, queryitem->field_value) : NULL))
+            {
+                matches = TRUE;
+            }
+        }
+
+        return matches;
+    }
+    else if(token_array->len == 1 && case_sensetive == FALSE)
     {
         matches = FALSE;
 
@@ -486,11 +522,11 @@ calculate_match_token (GlJournalEntry *entry,
         {
             queryitem = g_array_index (queryitems,GlQueryItem *,i);
 
-
-            if(((strstr("_MESSAGE", queryitem->field_name) && message) ? strstr(message, queryitem->field_value) : NULL)
-                || ((strstr("_COMM", queryitem->field_name) && comm) ? strstr(comm, queryitem->field_value) : NULL)
-                || ((strstr("_KERNEL_DEVICE", queryitem->field_name) && kernel_device) ? strstr(kernel_device, queryitem->field_value) : NULL)
-                || ((strstr("_AUDIT_SESSION", queryitem->field_name) && audit_session) ? strstr(audit_session, queryitem->field_value) : NULL))
+            /* will need to way to eliminate these big if statments */
+            if(((strstr("_MESSAGE", queryitem->field_name) && message) ? utf8_strcasestr(message, queryitem->field_value) : NULL)
+                || ((strstr("_COMM", queryitem->field_name) && comm) ? utf8_strcasestr(comm, queryitem->field_value) : NULL)
+                || ((strstr("_KERNEL_DEVICE", queryitem->field_name) && kernel_device) ? utf8_strcasestr(kernel_device, queryitem->field_value) : NULL)
+                || ((strstr("_AUDIT_SESSION", queryitem->field_name) && audit_session) ? utf8_strcasestr(audit_session, queryitem->field_value) : NULL))
             {
                 matches = TRUE;
             }
@@ -514,18 +550,36 @@ calculate_match_token (GlJournalEntry *entry,
         field_value = g_ptr_array_index (token_array, token_index);
         token_index++;
         
-        matches = (strstr ("_COMM", field_name) &&
-                   comm &&
-                   strstr (comm, field_value)) ||
-                  (strstr ("_MESSAGE", field_name) &&
-                   message &&
-                   strstr (message, field_value)) ||
-                  (strstr ("_KERNEL_DEVICE", field_name) &&
-                   kernel_device &&
-                   strstr (kernel_device, field_value)) ||
-                  (strstr ("_AUDIT_SESSION", field_name) &&
-                   audit_session &&
-                   strstr (audit_session, field_value));
+        if (case_sensetive)
+        {
+            matches = (strstr ("_COMM", field_name) &&
+                       comm &&
+                       strstr (comm, field_value)) ||
+                      (strstr ("_MESSAGE", field_name) &&
+                       message &&
+                       strstr (message, field_value)) ||
+                      (strstr ("_KERNEL_DEVICE", field_name) &&
+                       kernel_device &&
+                       strstr (kernel_device, field_value)) ||
+                      (strstr ("_AUDIT_SESSION", field_name) &&
+                       audit_session &&
+                       strstr (audit_session, field_value));
+        }
+        else
+        {
+            matches = (utf8_strcasestr ("_comm", field_name) &&
+                       comm &&
+                       strstr (comm, field_value)) ||
+                      (utf8_strcasestr ("_message", field_name) &&
+                       message &&
+                       strstr (message, field_value)) ||
+                      (utf8_strcasestr ("_kernel_device", field_name) &&
+                       kernel_device &&
+                       strstr (kernel_device, field_value)) ||
+                      (utf8_strcasestr ("_audit_session", field_name) &&
+                       audit_session &&
+                       strstr (audit_session, field_value));
+        }
 
         match_stack[match_count] = matches;
         match_count++;
@@ -611,6 +665,7 @@ search_in_entry (GlJournalEntry *entry,
                  GlQuery *query)
 {
     GlQueryItem *queryitem;
+    gboolean is_case_sensitive;
     gboolean matches;
     gchar *search_text_copy;
     GArray *queryitems;
@@ -618,13 +673,16 @@ search_in_entry (GlJournalEntry *entry,
 
     queryitems = gl_query_get_substring_matches(query);
 
+    /* Get search text and case_sensitivity parameters from a queryitem */
+
     queryitem = g_array_index (queryitems, GlQueryItem *, 0);
 
+    is_case_sensitive = queryitem->is_case_sensitive;
     search_text_copy = g_strdup (queryitem->field_value);
 
     token_array = tokenize_search_string (search_text_copy);
 
-    matches = calculate_match_token (entry, token_array, queryitems);
+    matches = calculate_match_token (entry, token_array, queryitems, is_case_sensitive);
 
     g_ptr_array_free (token_array, TRUE);
 
@@ -704,7 +762,7 @@ gl_query_new (void)
 }
 
 void
-gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuerySearchType search_type)
+gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuerySearchType search_type, gboolean case_sesitive)
 {
     GlQueryPrivate *priv;
 
@@ -715,6 +773,7 @@ gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuer
     queryitem->field_name = field_name;
     queryitem->field_value = field_value;
     queryitem->search_type = search_type;
+    queryitem->is_case_sensitive = case_sesitive;
 
     g_ptr_array_add (priv->queryitems, queryitem);
 }
@@ -722,8 +781,7 @@ gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuer
 static void
 gl_query_item_init (GlQueryItem *queryitem)
 {
-    queryitem->is_case_sensitive = FALSE;
-    queryitem->bool_operator_used = LOGICAL_OR;
+    queryitem->bool_operator_used = LOGICAL_OR; // This field not being used currently
 }
 
 static void
