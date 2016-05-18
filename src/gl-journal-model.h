@@ -21,6 +21,12 @@
 
 #include <gio/gio.h>
 
+typedef enum
+{
+    SEARCH_TYPE_EXACT,
+    SEARCH_TYPE_SUBSTRING
+} GlQuerySearchType;
+
 #define GL_TYPE_QUERY_ITEM gl_query_item_get_type()
 G_DECLARE_FINAL_TYPE (GlQueryItem, gl_query_item, GL, QUERY_ITEM, GObject)
 
@@ -63,7 +69,7 @@ void					gl_journal_model_search_init 				    (GlJournalModel *model,
                                   										 gchar *search_string,
                                   										 gboolean parameters[]);
 
-void gl_query_add_match (GlQuery *query,gchar *field_name, gchar *field_value, gchar *search_text, gboolean search_type);
+void gl_query_add_match (GlQuery *query,gchar *field_name, gchar *field_value, GlQuerySearchType search_type);
 
 GlQuery * 				gl_journal_model_get_query						(GlJournalModel *model);
 

@@ -889,7 +889,7 @@ gl_query_add_category_matches (GlQuery *query, const gchar * const *matches)
             gchar *field_name = strtok (g_strdup (matches[i]), s);
             gchar *field_value = strtok (NULL, s);
 
-            gl_query_add_match (query, field_name, field_value, NULL, TRUE);
+            gl_query_add_match (query, field_name, field_value, SEARCH_TYPE_EXACT);
         }
     }
 }
@@ -991,10 +991,10 @@ create_query_object (GlJournalModel *model,
         search_text="\0";
 
     // Add Substring Matches (will be affected by checkboxes or radioboxes in future)
-    gl_query_add_match (query,"_MESSAGE",search_text,search_text,FALSE);
-    gl_query_add_match (query,"_COMM", search_text, search_text, FALSE);
-    gl_query_add_match (query,"_KERNEL_DEVICE", search_text, search_text, FALSE);
-    gl_query_add_match (query,"_AUDIT_SESSION", search_text, search_text, FALSE);
+    gl_query_add_match (query,"_MESSAGE",search_text, SEARCH_TYPE_SUBSTRING);
+    gl_query_add_match (query,"_COMM", search_text, SEARCH_TYPE_SUBSTRING);
+    gl_query_add_match (query,"_KERNEL_DEVICE", search_text, SEARCH_TYPE_SUBSTRING);
+    gl_query_add_match (query,"_AUDIT_SESSION", search_text, SEARCH_TYPE_SUBSTRING);
 
     // set the query object on the journal model
     gl_journal_model_process_query(model);

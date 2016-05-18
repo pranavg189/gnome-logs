@@ -21,10 +21,9 @@
 
 struct _GlQueryItem
 {
-    gchar *search_text;
     gchar *field_name;
     gchar *field_value;
-    gboolean search_type;
+    GlQuerySearchType search_type;
     gboolean is_case_sensitive;
     gboolean bool_operator_used;
 };
@@ -48,7 +47,6 @@ struct _GlJournalModel
     GPtrArray *entries;
 
     GlQuery *query;             // resultant query passed to the journal model
-    gchar *search_text;
 
     guint n_entries_to_fetch;
     gboolean fetched_all;
@@ -56,7 +54,6 @@ struct _GlJournalModel
 };
 
 static void gl_journal_model_interface_init (GListModelInterface *iface);
-static gboolean gl_journal_model_calculate_match (GlJournalEntry *entry, GlQuery *query);
 static gboolean search_in_entry (GlJournalEntry *entry, GlQuery *query);
 
 G_DEFINE_TYPE_WITH_CODE (GlJournalModel, gl_journal_model, G_TYPE_OBJECT,
@@ -69,12 +66,6 @@ enum
     PROP_MATCHES,
     PROP_LOADING,
     N_PROPERTIES
-};
-
-enum
-{
-    SEARCH_TYPE_EXACT,
-    SEARCH_TYPE_SUBSTRING
 };
 
 typedef enum
@@ -128,7 +119,6 @@ gl_journal_model_init (GlJournalModel *model)
     model->batch_size = 50;
     model->journal = gl_journal_new ();
     model->query = NULL;
-    model->search_text = "\0";
     model->entries = g_ptr_array_new_with_free_func (g_object_unref);
 
     gl_journal_model_fetch_more_entries (model, FALSE);
@@ -287,15 +277,13 @@ gl_query_get_exact_matches (GlQuery *query)
 
     priv = gl_query_get_instance_private(query);
 
-    matches = g_array_new(FALSE, FALSE, sizeof (gchar *));
+    matches = g_array_new (FALSE, FALSE, sizeof (gchar *));
 
     for(i=0; i < priv->queryitems->len ;i++)
     {
         queryitem = g_ptr_array_index (priv->queryitems, i);
 
-        g_print("queryitem field name: %s\n", queryitem->field_name);
-
-        if(queryitem->search_type == TRUE)
+        if(queryitem->search_type == SEARCH_TYPE_EXACT)
         {
             gchar *match=NULL;
 
@@ -324,7 +312,7 @@ gl_query_get_substring_matches (GlQuery *query)
     {
         queryitem = g_ptr_array_index (priv->queryitems, i);
 
-        if(queryitem->search_type == FALSE)
+        if(queryitem->search_type == SEARCH_TYPE_SUBSTRING)
         {
             g_array_append_val (matches, queryitem);
         }
@@ -716,7 +704,7 @@ gl_query_new (void)
 }
 
 void
-gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, gchar *search_text, gboolean search_type)
+gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuerySearchType search_type)
 {
     GlQueryPrivate *priv;
 
@@ -724,12 +712,9 @@ gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, gchar 
 
     GlQueryItem *queryitem = g_object_new (GL_TYPE_QUERY_ITEM, NULL);
 
-    queryitem->search_text = search_text;
     queryitem->field_name = field_name;
     queryitem->field_value = field_value;
     queryitem->search_type = search_type;
-    queryitem->is_case_sensitive = FALSE;
-    queryitem->bool_operator_used = LOGICAL_OR;
 
     g_ptr_array_add (priv->queryitems, queryitem);
 }
@@ -748,7 +733,6 @@ gl_query_item_finalize (GObject *object)
 
   g_free (queryitem->field_name);
   g_free (queryitem->field_value);
-  g_free (queryitem->search_text);
 
   G_OBJECT_CLASS (gl_query_item_parent_class)->finalize (object);
 }
