@@ -19,24 +19,6 @@
 #include "gl-journal-model.h"
 #include "gl-journal.h"
 
-struct _GlQueryItem
-{
-    gchar *field_name;
-    gchar *field_value;
-    GlQuerySearchType search_type;
-    gboolean is_case_sensitive;
-    gboolean bool_operator_used;
-};
-
-G_DEFINE_TYPE (GlQueryItem, gl_query_item, G_TYPE_OBJECT);
-
-typedef struct
-{
-    GPtrArray *queryitems;   // array of GlQuery Objects passed through eventviewlist
-} GlQueryPrivate;
-
-G_DEFINE_TYPE_WITH_PRIVATE (GlQuery, gl_query, G_TYPE_OBJECT);
-
 struct _GlJournalModel
 {
     GObject parent_instance;
@@ -186,11 +168,6 @@ gl_journal_model_dispose (GObject *object)
         model->entries = NULL;
     }
 
-    if(model->query)
-    {
-        g_clear_object (&model->query);
-    }
-
     g_clear_object (&model->journal);
 
     G_OBJECT_CLASS (gl_journal_model_parent_class)->dispose (object);
@@ -275,22 +252,19 @@ gl_query_item_create_match_string (GlQueryItem *queryitem)
 static GArray *
 gl_query_get_exact_matches (GlQuery *query)
 {
-    GlQueryPrivate *priv;
     GlQueryItem *queryitem;
     GArray *matches;
+    gchar *match;
     gint i;
-
-    priv = gl_query_get_instance_private(query);
 
     matches = g_array_new (FALSE, FALSE, sizeof (gchar *));
 
-    for(i=0; i < priv->queryitems->len ;i++)
+    for(i=0; i < query->queryitems->len ;i++)
     {
-        queryitem = g_ptr_array_index (priv->queryitems, i);
+        queryitem = g_ptr_array_index (query->queryitems, i);
 
         if(queryitem->search_type == SEARCH_TYPE_EXACT)
         {
-            gchar *match=NULL;
 
             match = gl_query_item_create_match_string(queryitem);
 
@@ -304,18 +278,15 @@ gl_query_get_exact_matches (GlQuery *query)
 static GArray *
 gl_query_get_substring_matches (GlQuery *query)
 {
-    GlQueryPrivate *priv;
     GlQueryItem *queryitem;
     GArray *matches;
     gint i;
 
-    priv = gl_query_get_instance_private(query);
-
     matches = g_array_new(FALSE, FALSE, sizeof (GlQueryItem *));
 
-    for(i=0; i < priv->queryitems->len ;i++)
+    for(i=0; i < query->queryitems->len ;i++)
     {
-        queryitem = g_ptr_array_index (priv->queryitems, i);
+        queryitem = g_ptr_array_index (query->queryitems, i);
 
         if(queryitem->search_type == SEARCH_TYPE_SUBSTRING)
         {
@@ -326,16 +297,39 @@ gl_query_get_substring_matches (GlQuery *query)
     return matches;
 }
 
+static void
+clear_query(GlQuery *query)
+{
+    gint i;
+
+    for(i=0; i< query->queryitems->len; i++)
+    {
+        GlQueryItem *queryitem;
+
+        queryitem = g_ptr_array_index (query->queryitems, i);
+
+        g_free (queryitem->field_name);
+        g_free (queryitem->field_value);
+
+        g_free (queryitem);
+    }
+
+    g_ptr_array_free (query->queryitems, TRUE);
+
+    g_free(query);
+}
+
 /**
- * gl_journal_model_set_matches:
+ * gl_journal_model_set_query:
  * @model: a #GlJournalModel
- * @matches: new matches
+ * @query: query struct passed through view
  *
  * Changes @model's filter matches to @matches. This resets all items in
  * the model, as they have to be requeried from the journal.
  */
 void
-gl_journal_model_process_query (GlJournalModel      *model)
+gl_journal_model_set_query (GlJournalModel *model,
+                            GlQuery *query)
 {
     GArray *matches;
     g_return_if_fail (GL_IS_JOURNAL_MODEL (model));
@@ -348,11 +342,35 @@ gl_journal_model_process_query (GlJournalModel      *model)
         g_ptr_array_remove_range (model->entries, 0, model->entries->len);
     }
 
+    /* Clear the previous query */
+    if(model->query)
+        clear_query(model->query);
+
+    /* set new query */
+    model->query = query;
+
+    /* Set the exact matches first */
     matches = gl_query_get_exact_matches(model->query);
 
     gl_journal_set_matches (model->journal, matches);
 
+
+    /* Start re-population of the journal */
     gl_journal_model_fetch_more_entries (model, FALSE);
+
+    /* Free array */
+    gint i;
+    for(i=0; i < matches->len; i++)
+    {
+        gchar *match;
+
+        match = g_array_index (matches,gchar *, i);
+
+        g_free(match);
+    }
+
+    g_array_free (matches, TRUE);
+
 }
 
 gchar *
@@ -588,7 +606,7 @@ calculate_match_token (GlJournalEntry *entry,
 
 
         /* check for matches */
-        queryitem = g_object_new (GL_TYPE_QUERY_ITEM, NULL);
+        queryitem = g_new (GlQueryItem, 1);
 
         queryitem->field_name = field_name;
         queryitem->field_value = field_value;
@@ -696,13 +714,16 @@ search_in_entry (GlJournalEntry *entry,
     is_case_sensitive = queryitem->is_case_sensitive;
     search_text_copy = g_strdup (queryitem->field_value);
 
-    g_print("Search Text Case Sensitive: %s\n", is_case_sensitive ? "true" : "false");
-
+    /* Tokenize the entered text */
     token_array = tokenize_search_string (search_text_copy);
 
+    /* Calculate match with passed queryitems */
     matches = calculate_match_token (entry, token_array, queryitems, is_case_sensitive);
 
+    /* Free variables */
     g_ptr_array_free (token_array, TRUE);
+    g_free(search_text_copy);
+    g_array_free(queryitems, TRUE);
 
     return matches;
 }
@@ -755,96 +776,24 @@ gl_journal_model_fetch_more_entries (GlJournalModel *model,
     }
 }
 
-GlQuery *
-gl_journal_model_get_query(GlJournalModel *model)
-{
-    if(model->query)
-        g_clear_object (&model->query);
 
-     model->query = gl_query_new();
-
-     return model->query;
-}
-
+/* Function to add a new queryitem with given fields to query */
 void
-gl_journal_model_set_query(GlJournalModel *model, GlQuery *query)
+gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuerySearchType search_type, gboolean case_sensitive)
 {
-    model->query = query;
-}
+    GlQueryItem *queryitem = g_new ( GlQueryItem, 1);
 
-
-GlQuery *
-gl_query_new (void)
-{
-    return g_object_new (GL_TYPE_QUERY, NULL);
-}
-
-void
-gl_query_add_match(GlQuery *query, gchar *field_name, gchar *field_value, GlQuerySearchType search_type, gboolean case_sesitive)
-{
-    GlQueryPrivate *priv;
-
-    priv = gl_query_get_instance_private (query);
-
-    GlQueryItem *queryitem = g_object_new (GL_TYPE_QUERY_ITEM, NULL);
-
-    queryitem->field_name = field_name;
-    queryitem->field_value = field_value;
+    queryitem->field_name = g_strdup(field_name);
+    queryitem->field_value = g_strdup(field_value);
     queryitem->search_type = search_type;
-    queryitem->is_case_sensitive = case_sesitive;
+    queryitem->is_case_sensitive = case_sensitive;
 
-    g_ptr_array_add (priv->queryitems, queryitem);
+    g_ptr_array_add (query->queryitems, queryitem);
 }
 
-static void
-gl_query_item_init (GlQueryItem *queryitem)
-{
-    queryitem->bool_operator_used = LOGICAL_OR; // This field not being used currently
-}
 
-static void
-gl_query_item_finalize (GObject *object)
-{
-  GlQueryItem *queryitem = GL_QUERY_ITEM (object);
 
-  g_free (queryitem->field_name);
-  g_free (queryitem->field_value);
 
-  G_OBJECT_CLASS (gl_query_item_parent_class)->finalize (object);
-}
 
-static void
-gl_query_item_class_init (GlQueryItemClass *class)
-{
-  GObjectClass *object_class = G_OBJECT_CLASS (class);
-
-  object_class->finalize = gl_query_item_finalize;
-}
-
-static void
-gl_query_init (GlQuery *self)
-{
-    GlQueryPrivate *priv;
-
-    priv = gl_query_get_instance_private (self);
-
-    priv->queryitems = g_ptr_array_new_with_free_func (g_object_unref);
-}
-
-static void
-gl_query_finalize (GObject *object)
-{
-  GlQuery *query = GL_QUERY (object);
-
-  G_OBJECT_CLASS (gl_query_parent_class)->finalize (object);
-}
-
-static void
-gl_query_class_init (GlQueryClass *class)
-{
-  GObjectClass *object_class = G_OBJECT_CLASS (class);
-
-  object_class->finalize = gl_query_finalize;
-}
 
 

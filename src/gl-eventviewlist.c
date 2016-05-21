@@ -489,7 +489,7 @@ gl_event_list_view_create_row_widget (gpointer item,
 }
 
 static gchar *
-create_uid_match_string (void)
+get_uid_match_field_value (void)
 {
     GCredentials *creds;
     uid_t uid;
@@ -499,27 +499,21 @@ create_uid_match_string (void)
     uid = g_credentials_get_unix_user (creds, NULL);
 
     if (uid != -1)
-        str = g_strdup_printf ("_UID=%d", uid);
+        str = g_strdup_printf ("%d", uid);
 
     g_object_unref (creds);
     return str;
 }
 
-static void
-gl_query_add_category_matches (GlQuery *query, const gchar * const *matches)
+/* Get Boot ID for current boot match */
+static gchar *
+get_current_boot_id(const gchar *boot_match)
 {
-    if(matches)
-    {
-        const char s[2]="=";
-        for (gint i = 0; matches[i]; i++)
-        {
+    gchar *boot_value;
 
-            gchar *field_name = strtok (g_strdup (matches[i]), s);
-            gchar *field_value = strtok (NULL, s);
+    boot_value = strchr(boot_match, '=') + 1;
 
-            gl_query_add_match (query, field_name, field_value, SEARCH_TYPE_EXACT, FALSE);
-        }
-    }
+    return g_strdup(boot_value);
 }
 
 /* Create Query Object according to GUI elements and pass it on to Journal Model */
@@ -532,12 +526,19 @@ create_query_object (GlJournalModel *model,
                      const gchar *current_boot_match)
 {
     GlQuery *query;
+    gchar *boot_id;
     GlCategoryListFilter filter;
     gboolean case_sensetive;
-    // Add Category Matches (Exact)
 
-    query = gl_journal_model_get_query(model);
+    /* Create new query object */
+    query = g_new (GlQuery, 1);
 
+    query->queryitems = g_ptr_array_new();
+
+    /* Get current boot id */
+    boot_id = get_current_boot_id (current_boot_match);
+
+    /* Add Exact Matches according to selected category */
     filter = gl_category_list_get_category (list);
 
     switch (filter)
@@ -545,20 +546,17 @@ create_query_object (GlJournalModel *model,
         case GL_CATEGORY_LIST_FILTER_IMPORTANT:
             {
               /* Alert or emergency priority. */
-              const gchar * match_query[] = { "PRIORITY=0", "PRIORITY=1", "PRIORITY=2", "PRIORITY=3", NULL, NULL };
-
-              match_query[4] = current_boot_match;
-              gl_query_add_category_matches(query, match_query);
-
+              gl_query_add_match (query,"PRIORITY","0", SEARCH_TYPE_EXACT, FALSE);
+              gl_query_add_match (query,"PRIORITY","1", SEARCH_TYPE_EXACT, FALSE);
+              gl_query_add_match (query,"PRIORITY","2", SEARCH_TYPE_EXACT, FALSE);
+              gl_query_add_match (query,"PRIORITY","3", SEARCH_TYPE_EXACT, FALSE);
+              gl_query_add_match (query,"_BOOT_ID", boot_id, SEARCH_TYPE_EXACT, FALSE);
             }
             break;
 
         case GL_CATEGORY_LIST_FILTER_ALL:
             {
-                const gchar *match_query[] = { NULL, NULL };
-
-                match_query[0] = current_boot_match;
-                gl_query_add_category_matches(query, match_query);
+                gl_query_add_match (query,"_BOOT_ID", boot_id, SEARCH_TYPE_EXACT, FALSE);
             }
             break;
 
@@ -566,18 +564,15 @@ create_query_object (GlJournalModel *model,
             /* Allow all _TRANSPORT != kernel. Attempt to filter by only processes
              * owned by the same UID. */
             {
-                gchar *uid_str = NULL;
-                const gchar *match_query[] = { "_TRANSPORT=journal",
-                                         "_TRANSPORT=stdout",
-                                         "_TRANSPORT=syslog",
-                                         NULL,
-                                         NULL,
-                                         NULL };
+                gchar *uid_str;
 
-                uid_str = create_uid_match_string ();
-                match_query[3] = uid_str;
-                match_query[4] = current_boot_match;
-                gl_query_add_category_matches(query, match_query);
+                uid_str = get_uid_match_field_value ();
+
+                gl_query_add_match (query,"_TRANSPORT","journal", SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_TRANSPORT","stdout", SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_TRANSPORT","syslog", SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_UID", uid_str, SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_BOOT_ID", boot_id, SEARCH_TYPE_EXACT, FALSE);
 
                 g_free (uid_str);
             }
@@ -585,28 +580,23 @@ create_query_object (GlJournalModel *model,
 
         case GL_CATEGORY_LIST_FILTER_SYSTEM:
             {
-                const gchar *match_query[] = { "_TRANSPORT=kernel", NULL, NULL };
-
-                match_query[1] = current_boot_match;
-                gl_query_add_category_matches(query, match_query);
+                gl_query_add_match (query,"_TRANSPORT","kernel", SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_BOOT_ID", boot_id, SEARCH_TYPE_EXACT, FALSE);
             }
             break;
 
         case GL_CATEGORY_LIST_FILTER_HARDWARE:
             {
-                const gchar *match_query[] = { "_TRANSPORT=kernel", "_KERNEL_DEVICE", NULL, NULL };
-
-                match_query[2] = current_boot_match;
-                gl_query_add_category_matches(query, match_query);
+                gl_query_add_match (query,"_TRANSPORT","kernel", SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_KERNEL_DEVICE", NULL, SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_BOOT_ID", boot_id, SEARCH_TYPE_EXACT, FALSE);
             }
             break;
 
         case GL_CATEGORY_LIST_FILTER_SECURITY:
             {
-                const gchar *match_query[] = { "_AUDIT_SESSION", NULL, NULL };
-
-                match_query[1] = current_boot_match;
-                gl_query_add_category_matches(query, match_query);
+                gl_query_add_match (query,"_AUDIT_SESSION", NULL, SEARCH_TYPE_EXACT, FALSE);
+                gl_query_add_match (query,"_BOOT_ID", boot_id, SEARCH_TYPE_EXACT, FALSE);
             }
             break;
 
@@ -619,7 +609,7 @@ create_query_object (GlJournalModel *model,
         search_text="\0";
 
     /* Check case sensitivity */
-    case_sensetive = search_is_case_sensitive(search_text);
+    case_sensetive = search_is_case_sensitive (search_text);
 
 
     /* Add Substring Matches (will be affected by checkboxes or radioboxes in future) */
@@ -629,7 +619,9 @@ create_query_object (GlJournalModel *model,
     gl_query_add_match (query,"_AUDIT_SESSION", search_text, SEARCH_TYPE_SUBSTRING, case_sensetive);
 
     /* set the query object on the journal model */
-    gl_journal_model_process_query(model);
+    gl_journal_model_set_query(model, query);
+
+    g_free(boot_id);
 }
 
 static void
@@ -881,11 +873,6 @@ gl_event_view_list_init (GlEventViewList *view)
     priv->category_sizegroup = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
     priv->message_sizegroup = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
     priv->time_sizegroup = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
-    priv->checkbox_values = g_hash_table_new(NULL, NULL);
-
-    g_hash_table_insert (priv->checkbox_values, "PID", (gpointer) TRUE);
-    g_hash_table_insert (priv->checkbox_values, "MESSAGE", (gpointer)TRUE);
-    g_hash_table_insert (priv->checkbox_values, "PROCESS_NAME",(gpointer) TRUE);
 
     categories = GL_CATEGORY_LIST (priv->categories);
 

@@ -27,35 +27,28 @@ typedef enum
     SEARCH_TYPE_SUBSTRING
 } GlQuerySearchType;
 
-#define GL_TYPE_QUERY_ITEM gl_query_item_get_type()
-G_DECLARE_FINAL_TYPE (GlQueryItem, gl_query_item, GL, QUERY_ITEM, GObject)
-
-typedef struct
+/* Details of match fields */
+typedef struct GlQueryItem
 {
-    /*< private >*/
-    GObject parent_instance;
+    gchar *field_name;
+    gchar *field_value;
+    GlQuerySearchType search_type;
+    gboolean is_case_sensitive;
+    gboolean bool_operator_used;
+} GlQueryItem;
+
+/* Resultant Query passed to Journal model from eventviewlist */
+typedef struct GlQuery
+{
+    GPtrArray *queryitems;   /* array of GlQuery Objects passed through eventviewlist */
 } GlQuery;
-
-typedef struct
-{
-    /*< private >*/
-    GObjectClass parent_class;
-} GlQueryClass;
-
-#define GL_TYPE_QUERY (gl_query_get_type())
-#define GL_QUERY(object) (G_TYPE_CHECK_INSTANCE_CAST ((object), GL_TYPE_QUERY, GlQuery))
 
 #define GL_TYPE_JOURNAL_MODEL gl_journal_model_get_type()
 G_DECLARE_FINAL_TYPE (GlJournalModel, gl_journal_model, GL, JOURNAL_MODEL, GObject)
 
 GlJournalModel *        gl_journal_model_new                            (void);
 
-GType gl_query_result_get_type (void);
-GType gl_query_get_type (void);
-
-GlQuery *				gl_query_new 									(void);
-
-void                    gl_journal_model_process_query                  (GlJournalModel *model);
+void                    gl_journal_model_set_query                  (GlJournalModel *model, GlQuery *query);
 gboolean                gl_journal_model_get_loading                    (GlJournalModel *model);
 
 void                    gl_journal_model_fetch_more_entries             (GlJournalModel *model,
@@ -72,7 +65,5 @@ void					gl_journal_model_search_init 				    (GlJournalModel *model,
 void gl_query_add_match (GlQuery *query,gchar *field_name, gchar *field_value, GlQuerySearchType search_type, gboolean case_sensitive);
 
 GlQuery * 				gl_journal_model_get_query						(GlJournalModel *model);
-
-void					gl_journal_model_set_query						(GlJournalModel *model, GlQuery *query);
 
 #endif
