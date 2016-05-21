@@ -186,6 +186,11 @@ gl_journal_model_dispose (GObject *object)
         model->entries = NULL;
     }
 
+    if(model->query)
+    {
+        g_clear_object (&model->query);
+    }
+
     g_clear_object (&model->journal);
 
     G_OBJECT_CLASS (gl_journal_model_parent_class)->dispose (object);
@@ -464,6 +469,83 @@ tokenize_search_string (gchar *search_text)
     return token_array;
 }
 
+/* Functions for replacing the big if queries in calculate token match */
+static const gchar *
+gl_query_item_get_entry_parameter (GlQueryItem *queryitem,
+                                   GlJournalEntry *entry)
+{
+    const gchar *comm;
+    const gchar *message;
+    const gchar *kernel_device;
+    const gchar *audit_session;
+
+    comm = gl_journal_entry_get_command_line (entry);
+    message = gl_journal_entry_get_message (entry);
+    kernel_device = gl_journal_entry_get_kernel_device (entry);
+    audit_session = gl_journal_entry_get_audit_session (entry);
+
+    if (strstr("_MESSAGE", queryitem->field_name) || strstr("_message", queryitem->field_name)) return message;
+
+    else if(strstr("_COMM", queryitem->field_name) || strstr("_comm", queryitem->field_name)) return comm;
+
+    else if(strstr("_KERNEL_DEVICE", queryitem->field_name) || strstr("_kernel_device", queryitem->field_name)) return kernel_device;
+
+    else if(strstr("_AUDIT_SESSION", queryitem->field_name) || strstr("_audit_session", queryitem->field_name)) return audit_session;
+
+    return NULL;
+}
+
+static gboolean
+gl_query_item_get_match (GlQueryItem *queryitem,
+                         const gchar *field_value,
+                         gboolean case_sensetive)
+{
+    /* check if the field exists in the current entry or not */
+    if(!field_value)
+        return FALSE;
+
+    if(case_sensetive)
+    {
+        if(strstr(field_value, queryitem->field_value))
+        {
+            return TRUE;
+        }
+    }
+    else
+    {
+        if(utf8_strcasestr(field_value, queryitem->field_value))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static gboolean
+gl_query_items_check_parameters (GArray *queryitems,
+                                 GlJournalEntry *entry,
+                                 gboolean case_sensetive)
+{
+    GlQueryItem *queryitem;
+    const gchar *entry_parameter;
+    gint i;
+
+    for(i=0; i < queryitems->len ;i++)
+        {
+            queryitem = g_array_index (queryitems, GlQueryItem *, i);
+
+            entry_parameter = gl_query_item_get_entry_parameter(queryitem, entry);
+
+            if(gl_query_item_get_match (queryitem, entry_parameter, case_sensetive))
+            {
+                return TRUE;
+            }
+        }
+
+    return FALSE;
+}
+
 static gboolean
 calculate_match_token (GlJournalEntry *entry,
                        GPtrArray *token_array,
@@ -471,70 +553,24 @@ calculate_match_token (GlJournalEntry *entry,
                        gboolean case_sensetive)
 {
     GlQueryItem *queryitem;
-
-    const gchar *comm;
-    const gchar *message;
-    const gchar *kernel_device;
-    const gchar *audit_session;
-
     gchar *field_name;
     gchar *field_value;
-
+    const gchar *entry_parameter;
     gboolean matches;
     gint match_stack[10];
     guint match_count = 0;
     guint token_index = 0;
 
+
     gint i;
 
-    comm = gl_journal_entry_get_command_line (entry);
-    message = gl_journal_entry_get_message (entry);
-    kernel_device = gl_journal_entry_get_kernel_device (entry);
-    audit_session = gl_journal_entry_get_audit_session (entry);
-
     /* No logical AND or OR used in search text */
-    if(token_array->len == 1 && case_sensetive == TRUE)
+    if(token_array->len == 1)
     {
-        matches = FALSE;
-
-        /* below loop can be made as seperate function */
-        for(i=0; i < queryitems->len ;i++)
-        {
-            queryitem = g_array_index (queryitems,GlQueryItem *,i);
-
-            /* will need to way to eliminate these big if statments */
-            if(((strstr("_MESSAGE", queryitem->field_name) && message) ? strstr(message, queryitem->field_value) : NULL)
-                || ((strstr("_COMM", queryitem->field_name) && comm) ? strstr(comm, queryitem->field_value) : NULL)
-                || ((strstr("_KERNEL_DEVICE", queryitem->field_name) && kernel_device) ? strstr(kernel_device, queryitem->field_value) : NULL)
-                || ((strstr("_AUDIT_SESSION", queryitem->field_name) && audit_session) ? strstr(audit_session, queryitem->field_value) : NULL))
-            {
-                matches = TRUE;
-            }
-        }
-
-        return matches;
-    }
-    else if(token_array->len == 1 && case_sensetive == FALSE)
-    {
-        matches = FALSE;
-
-        for(i=0; i < queryitems->len ;i++)
-        {
-            queryitem = g_array_index (queryitems,GlQueryItem *,i);
-
-            /* will need to way to eliminate these big if statments */
-            if(((strstr("_MESSAGE", queryitem->field_name) && message) ? utf8_strcasestr(message, queryitem->field_value) : NULL)
-                || ((strstr("_COMM", queryitem->field_name) && comm) ? utf8_strcasestr(comm, queryitem->field_value) : NULL)
-                || ((strstr("_KERNEL_DEVICE", queryitem->field_name) && kernel_device) ? utf8_strcasestr(kernel_device, queryitem->field_value) : NULL)
-                || ((strstr("_AUDIT_SESSION", queryitem->field_name) && audit_session) ? utf8_strcasestr(audit_session, queryitem->field_value) : NULL))
-            {
-                matches = TRUE;
-            }
-        }
-
-        return matches;
+        return gl_query_items_check_parameters (queryitems, entry, case_sensetive);
     }
 
+    /* If multiple Tokens are present : execute the token mode */
     while (token_index < token_array->len)       /* iterate through the token array */
     {
         //g_print("entered token loop\n");
@@ -549,37 +585,17 @@ calculate_match_token (GlJournalEntry *entry,
 
         field_value = g_ptr_array_index (token_array, token_index);
         token_index++;
-        
-        if (case_sensetive)
-        {
-            matches = (strstr ("_COMM", field_name) &&
-                       comm &&
-                       strstr (comm, field_value)) ||
-                      (strstr ("_MESSAGE", field_name) &&
-                       message &&
-                       strstr (message, field_value)) ||
-                      (strstr ("_KERNEL_DEVICE", field_name) &&
-                       kernel_device &&
-                       strstr (kernel_device, field_value)) ||
-                      (strstr ("_AUDIT_SESSION", field_name) &&
-                       audit_session &&
-                       strstr (audit_session, field_value));
-        }
-        else
-        {
-            matches = (utf8_strcasestr ("_comm", field_name) &&
-                       comm &&
-                       strstr (comm, field_value)) ||
-                      (utf8_strcasestr ("_message", field_name) &&
-                       message &&
-                       strstr (message, field_value)) ||
-                      (utf8_strcasestr ("_kernel_device", field_name) &&
-                       kernel_device &&
-                       strstr (kernel_device, field_value)) ||
-                      (utf8_strcasestr ("_audit_session", field_name) &&
-                       audit_session &&
-                       strstr (audit_session, field_value));
-        }
+
+
+        /* check for matches */
+        queryitem = g_object_new (GL_TYPE_QUERY_ITEM, NULL);
+
+        queryitem->field_name = field_name;
+        queryitem->field_value = field_value;
+
+        entry_parameter = gl_query_item_get_entry_parameter(queryitem, entry);
+
+        matches = gl_query_item_get_match (queryitem, entry_parameter, case_sensetive);
 
         match_stack[match_count] = matches;
         match_count++;
@@ -679,6 +695,8 @@ search_in_entry (GlJournalEntry *entry,
 
     is_case_sensitive = queryitem->is_case_sensitive;
     search_text_copy = g_strdup (queryitem->field_value);
+
+    g_print("Search Text Case Sensitive: %s\n", is_case_sensitive ? "true" : "false");
 
     token_array = tokenize_search_string (search_text_copy);
 
