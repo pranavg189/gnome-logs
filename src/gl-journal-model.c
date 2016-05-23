@@ -136,7 +136,6 @@ gl_journal_model_set_property (GObject      *object,
     switch (property_id)
     {
     case PROP_MATCHES:
-        //gl_journal_model_set_matches (model, g_value_get_boxed (value));
         break;
 
     default:
