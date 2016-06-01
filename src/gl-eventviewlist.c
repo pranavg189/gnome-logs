@@ -57,6 +57,16 @@ typedef struct
     GtkWidget *parameter_stack;
     GtkWidget *parameter_listbox;
     GtkWidget *parameter_label;
+    GtkWidget *since_date_stack;
+    GtkWidget *since_around_stack;
+    GtkWidget *since_date_entry;
+    GtkWidget *since_around_revealer;
+    GtkWidget *since_dates_listbox;
+    GtkWidget *until_date_stack;
+    GtkWidget *until_around_stack;
+    GtkWidget *until_date_entry;
+    GtkWidget *until_around_revealer;
+    GtkWidget *until_dates_listbox;
 
     gchar *search_text;
     const gchar *boot_match;
@@ -89,8 +99,14 @@ struct {
     {
         N_("Process Name"),
         ("COMM")
+    },
+    {
+        N_("Systemd Unit"),
+        ("_SYSTEMD_UNIT")
     }
 };
+
+gchar *time_groups[]  =  {"Current Boot time", "Today", "Yesterday"};
 
 G_DEFINE_TYPE_WITH_PRIVATE (GlEventViewList, gl_event_view_list, GTK_TYPE_BOX)
 
@@ -437,6 +453,73 @@ fill_parameter_listbox (GlEventViewList *view)
     }
 }
 
+/* Fill the entries in the date listboxes */
+static void
+fill_until_since_date_listboxes (GlEventViewList *view)
+{
+  GlEventViewListPrivate *priv;
+  GtkWidget *since_row;
+  GtkWidget *until_row;
+  int i;
+  gint n_groups;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  n_groups = G_N_ELEMENTS (time_groups);
+
+  /* Parameters */
+  for (i = 0; i < n_groups; i++)
+    {
+      since_row = create_row_for_label (time_groups[i], i == 1);
+      until_row = create_row_for_label (time_groups[i], i == 1);
+
+      g_object_set_data (G_OBJECT (since_row), "since_date_group", GINT_TO_POINTER (i));
+      g_object_set_data (G_OBJECT (until_row), "until_date_group", GINT_TO_POINTER (i));
+
+      gtk_container_add (GTK_CONTAINER (priv->since_dates_listbox), since_row);
+      gtk_container_add (GTK_CONTAINER (priv->until_dates_listbox), until_row);
+    }
+}
+
+/* function to hide/show date selection widgets */
+static void
+show_since_date_selection_widgets (GlEventViewList *view,
+                                   gboolean         visible)
+{
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private(view);
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->since_date_stack),
+                                    visible ? "since-date-entry" : "since-date-button");
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->since_around_stack), "since-date-list");
+  gtk_entry_set_icon_from_icon_name (GTK_ENTRY (priv->since_date_entry),
+                                     GTK_ENTRY_ICON_SECONDARY,
+                                     "x-office-calendar-symbolic");
+
+  gtk_widget_set_visible (priv->since_around_revealer, visible);
+
+  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->since_around_revealer), visible);
+}
+
+static void
+show_until_date_selection_widgets (GlEventViewList *view,
+                                   gboolean         visible)
+{
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private(view);
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->until_date_stack),
+                                    visible ? "until-date-entry" : "until-date-button");
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->until_around_stack), "until-date-list");
+  gtk_entry_set_icon_from_icon_name (GTK_ENTRY (priv->until_date_entry),
+                                     GTK_ENTRY_ICON_SECONDARY,
+                                     "x-office-calendar-symbolic");
+
+  gtk_widget_set_visible (priv->until_around_revealer, visible);
+
+  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->until_around_revealer), visible);
+}
+
 /* event handlers for popover elements */
 
 static void
@@ -447,6 +530,9 @@ select_parameter_button_clicked (gpointer user_data)
 
     priv = gl_event_view_list_get_instance_private (view);
     gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-list");
+
+    show_since_date_selection_widgets(view, FALSE);
+    show_until_date_selection_widgets(view, FALSE);
 
     g_print("handler called\n");
 }
@@ -482,8 +568,115 @@ search_popover_closed (GtkPopover *popover,
 
     priv = gl_event_view_list_get_instance_private (view);
     gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-button");
+
+    show_since_date_selection_widgets(view, FALSE);
+    show_until_date_selection_widgets(view, FALSE);
     g_print("popover_closed\n");
 }
+
+/* Handler function when calendar icon is clicked */
+static void
+since_toggle_calendar_icon_clicked (GtkEntry              *entry,
+                                    GtkEntryIconPosition   position,
+                                    GdkEvent              *event,
+                                    GlEventViewList *view)
+{
+  GlEventViewListPrivate *priv;
+  const gchar *current_visible_child;
+  const gchar *child;
+  const gchar *icon_name;
+  const gchar *tooltip;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  current_visible_child = gtk_stack_get_visible_child_name (GTK_STACK (priv->since_around_stack));
+
+  if (g_strcmp0 (current_visible_child, "since-date-list") == 0)
+    {
+      child = "since-date-calendar";
+      icon_name = "view-list-symbolic";
+      tooltip = _("Show a list to select the date");
+    }
+  else
+    {
+      child = "since-date-list";
+      icon_name = "x-office-calendar-symbolic";
+      tooltip = _("Show a calendar to select the date");
+    }
+
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->since_around_stack), child);
+  gtk_entry_set_icon_from_icon_name (entry, GTK_ENTRY_ICON_SECONDARY, icon_name);
+  gtk_entry_set_icon_tooltip_text (entry, GTK_ENTRY_ICON_SECONDARY, tooltip);
+}
+
+static void
+until_toggle_calendar_icon_clicked (GtkEntry              *entry,
+                                    GtkEntryIconPosition   position,
+                                    GdkEvent              *event,
+                                    GlEventViewList *view)
+{
+  GlEventViewListPrivate *priv;
+  const gchar *current_visible_child;
+  const gchar *child;
+  const gchar *icon_name;
+  const gchar *tooltip;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  current_visible_child = gtk_stack_get_visible_child_name (GTK_STACK (priv->until_around_stack));
+
+  if (g_strcmp0 (current_visible_child, "until-date-list") == 0)
+    {
+      child = "until-date-calendar";
+      icon_name = "view-list-symbolic";
+      tooltip = _("Show a list to select the date");
+    }
+  else
+    {
+      child = "until-date-list";
+      icon_name = "x-office-calendar-symbolic";
+      tooltip = _("Show a calendar to select the date");
+    }
+
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->until_around_stack), child);
+  gtk_entry_set_icon_from_icon_name (entry, GTK_ENTRY_ICON_SECONDARY, icon_name);
+  gtk_entry_set_icon_tooltip_text (entry, GTK_ENTRY_ICON_SECONDARY, tooltip);
+}
+
+static void
+since_select_date_button_clicked (gpointer user_data)
+{
+    GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+    GlEventViewListPrivate *priv;
+
+    priv = gl_event_view_list_get_instance_private (view);
+
+  /* Hide the type selection widgets when date selection
+   * widgets are shown.
+   */
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-button");
+
+  show_until_date_selection_widgets (view, FALSE);
+  show_since_date_selection_widgets (view, TRUE);
+}
+
+static void
+until_select_date_button_clicked (gpointer user_data)
+{
+    GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+    GlEventViewListPrivate *priv;
+
+    priv = gl_event_view_list_get_instance_private (view);
+
+  /* Hide the type selection widgets when date selection
+   * widgets are shown.
+   */
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-button");
+
+  show_since_date_selection_widgets (view, FALSE);
+  show_until_date_selection_widgets (view, TRUE);
+}
+
 
 /* Get the popover elements from ui file and link it with the drop down button */
 
@@ -500,9 +693,26 @@ setup_search_popover (GlEventViewList *view)
 
     /* Get elements from the popover ui file */
     priv->search_popover = GTK_WIDGET (gtk_builder_get_object (builder, "search_popover"));
+
+    /* elements related to "what" parameter filter label */
     priv->parameter_stack = GTK_WIDGET (gtk_builder_get_object (builder, "parameter_stack"));
     priv->parameter_listbox = GTK_WIDGET (gtk_builder_get_object (builder, "parameter_listbox"));
     priv->parameter_label = GTK_WIDGET (gtk_builder_get_object (builder, "parameter_label"));
+
+    /* elements related to "since" date selection label */
+    priv->since_date_stack = GTK_WIDGET (gtk_builder_get_object (builder, "since_date_stack"));
+    priv->since_around_stack = GTK_WIDGET (gtk_builder_get_object (builder, "since_around_stack"));
+    priv->since_date_entry = GTK_WIDGET (gtk_builder_get_object (builder, "since_date_entry"));
+    priv->since_around_revealer = GTK_WIDGET (gtk_builder_get_object (builder, "since_around_revealer"));
+    priv->since_dates_listbox = GTK_WIDGET (gtk_builder_get_object (builder, "since_dates_listbox"));
+
+    /* elements related to "until" date selection label */
+    priv->until_date_stack = GTK_WIDGET (gtk_builder_get_object (builder, "until_date_stack"));
+    priv->until_around_stack = GTK_WIDGET (gtk_builder_get_object (builder, "until_around_stack"));
+    priv->until_date_entry = GTK_WIDGET (gtk_builder_get_object (builder, "until_date_entry"));
+    priv->until_around_revealer = GTK_WIDGET (gtk_builder_get_object (builder, "until_around_revealer"));
+    priv->until_dates_listbox = GTK_WIDGET (gtk_builder_get_object (builder, "until_dates_listbox"));
+
 
     /* Link the drop down button with search popover */
     gtk_menu_button_set_popover (GTK_MENU_BUTTON (priv->search_dropdown_button),
@@ -516,10 +726,18 @@ setup_search_popover (GlEventViewList *view)
                                       G_CALLBACK (parameter_listbox_row_activated),
                                       "search_popover_closed",
                                       G_CALLBACK (search_popover_closed),
+                                      "since_select_date_button_clicked",
+                                      G_CALLBACK (since_select_date_button_clicked),
+                                      "until_select_date_button_clicked",
+                                      G_CALLBACK (until_select_date_button_clicked),
+                                      "since_toggle_calendar_icon_clicked",
+                                      G_CALLBACK (since_toggle_calendar_icon_clicked),
+                                      "until_toggle_calendar_icon_clicked",
+                                      G_CALLBACK (until_toggle_calendar_icon_clicked),
                                       NULL);
 
+    /* pass "GlEventviewlist *view" as user_data to signals as callback data*/
     gtk_builder_connect_signals (builder, view);
-
 
     /* Set up header function for parameter listbox */
     gtk_list_box_set_header_func (GTK_LIST_BOX (priv->parameter_listbox),
@@ -527,8 +745,21 @@ setup_search_popover (GlEventViewList *view)
                                   NULL,
                                   NULL);
 
+    gtk_list_box_set_header_func (GTK_LIST_BOX (priv->since_dates_listbox),
+                                  (GtkListBoxUpdateHeaderFunc) parameter_listbox_header_func,
+                                  NULL,
+                                  NULL);
+
+    gtk_list_box_set_header_func (GTK_LIST_BOX (priv->until_dates_listbox),
+                                  (GtkListBoxUpdateHeaderFunc) parameter_listbox_header_func,
+                                  NULL,
+                                  NULL);
+
     /* Fill the listbox */
     fill_parameter_listbox(view);
+
+    /* Fill until and since date listboxes */
+    fill_until_since_date_listboxes(view);
 
 }
 
