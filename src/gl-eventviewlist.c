@@ -50,17 +50,16 @@ typedef struct
     GtkWidget *event_search;
     GtkWidget *event_scrolled;
     GtkWidget *search_entry;
+
+    /* Search Popover elements */
     GtkWidget *search_dropdown_button;
-    GtkWidget *search_menu_popover;
-    GtkWidget *pid_checkbox;
+    GtkWidget *search_popover;
+    GtkWidget *parameter_stack;
+    GtkWidget *parameter_listbox;
+    GtkWidget *parameter_label;
+
     gchar *search_text;
     const gchar *boot_match;
-
-    GHashTable *checkbox_values;
-
-    gboolean pid_status;
-    gboolean process_name_status;
-    gboolean message_status;
 } GlEventViewListPrivate;
 
 /* We define these two enum values as 2 and 3 to avoid the conflict with TRUE
@@ -71,15 +70,27 @@ typedef enum
     LOGICAL_AND = 3
 } GlEventViewListLogic;
 
-enum
-{
-    PID,
-    PROCESS_NAME,
-    MESSAGE,
-    NUM_CHECKBOX_PARAMETERS
+struct {
+    gchar *name;
+    gchar *value;
+} parameter_groups[] = {
+    {
+        N_("All Available Fields"),
+        (NULL)
+    },
+    {
+        N_("PID"),
+        ("PID")
+    },
+    {
+        N_("Message"),
+        ("MESSAGE")
+    },
+    {
+        N_("Process Name"),
+        ("COMM")
+    }
 };
-
-gboolean checkbox_value[NUM_CHECKBOX_PARAMETERS] = {FALSE};
 
 G_DEFINE_TYPE_WITH_PRIVATE (GlEventViewList, gl_event_view_list, GTK_TYPE_BOX)
 
@@ -341,104 +352,183 @@ gl_event_view_create_empty (G_GNUC_UNUSED GlEventViewList *view)
 
     return box;
 }
+/* Header function to draw seperator in listbox */
+static void
+parameter_listbox_header_func (GtkListBoxRow         *row,
+                     GtkListBoxRow         *before,
+                     gpointer              user_data)
+{
+  gboolean show_separator;
+
+  show_separator = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (row), "show-separator"));
+
+  if (show_separator)
+    {
+      GtkWidget *separator;
+
+      separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
+      gtk_widget_show (separator);
+
+      gtk_list_box_row_set_header (row, separator);
+    }
+}
+
+/* Function to get the entries to be filled in the parameter listbox */
+static gint
+parameter_get_number_of_groups(void)
+{
+    return G_N_ELEMENTS (parameter_groups);
+}
+
+static const gchar*
+parameter_group_get_name (gint group_index)
+{
+  g_return_val_if_fail (group_index < G_N_ELEMENTS (parameter_groups), NULL);
+
+  return gettext (parameter_groups[group_index].name);
+}
+
+/* Function to create a row in the popover listbox */
+
+static GtkWidget*
+create_row_for_label (const gchar *text,
+                      gboolean     show_separator)
+{
+  GtkWidget *row;
+  GtkWidget *label;
+
+  row = gtk_list_box_row_new ();
+
+  g_object_set_data (G_OBJECT (row), "show-separator", GINT_TO_POINTER (show_separator));
+
+  label = g_object_new (GTK_TYPE_LABEL,
+                        "label", text,
+                        "hexpand", TRUE,
+                        "xalign", 0.0,
+                        "margin-start", 6,
+                        NULL);
+
+  gtk_container_add (GTK_CONTAINER (row), label);
+  gtk_widget_show_all (row);
+
+  return row;
+}
+
+/* Fill the entries in the parameter listbox */
+static void
+fill_parameter_listbox (GlEventViewList *view)
+{
+  GlEventViewListPrivate *priv;
+  GtkWidget *row;
+  int i;
+  gint n_groups;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  n_groups = parameter_get_number_of_groups ();
+
+  /* Parameters */
+  for (i = 0; i < n_groups; i++)
+    {
+      row = create_row_for_label (parameter_group_get_name (i), i == 1);
+      g_object_set_data (G_OBJECT (row), "parameter-name", GINT_TO_POINTER (i));
+
+      gtk_container_add (GTK_CONTAINER (priv->parameter_listbox), row);
+    }
+}
+
+/* event handlers for popover elements */
 
 static void
-action_pid_status (GSimpleAction *action,
-                   GVariant      *variant,
-                   gpointer       user_data)
+select_parameter_button_clicked (gpointer user_data)
 {
-    gboolean pid_checkbox_status;
+    GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+    GlEventViewListPrivate *priv;
 
-    pid_checkbox_status = g_variant_get_boolean (variant);
+    priv = gl_event_view_list_get_instance_private (view);
+    gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-list");
 
-    if(pid_checkbox_status == TRUE)
-        g_print("pid checkbox is enabled\n");
-    else
-        g_print("pid_checkbox is not enabled\n");
-
-    checkbox_value[PID] = pid_checkbox_status;
-
-    g_simple_action_set_state (action, variant);
+    g_print("handler called\n");
 }
 
 static void
-action_processname_status (GSimpleAction *action,
-                       GVariant      *variant,
-                       gpointer       user_data)
+parameter_listbox_row_activated (GtkListBox            *listbox,
+                                 GtkListBoxRow         *row,
+                                 gpointer user_data)
 {
-    gboolean processname_checkbox_status;
+  GlEventViewList *view;
+  GlEventViewListPrivate *priv;
+  gint group;
 
-    processname_checkbox_status = g_variant_get_boolean (variant);
+  view = GL_EVENT_VIEW_LIST (user_data);
 
-    if(processname_checkbox_status == TRUE)
-        g_print("processname checkbox is enabled\n");
-    else
-        g_print("processname_checkbox is not enabled\n");
+  priv = gl_event_view_list_get_instance_private (view);
 
-    checkbox_value[PROCESS_NAME] = processname_checkbox_status;
+  group = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (row), "parameter-name"));
 
-    g_simple_action_set_state (action, variant);
+  gtk_label_set_label (GTK_LABEL (priv->parameter_label),
+                           parameter_group_get_name (group));
+
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-button");
+
 }
 
 static void
-action_message_status (GSimpleAction *action,
-                       GVariant      *variant,
-                       gpointer       user_data)
+search_popover_closed (GtkPopover *popover,
+                       gpointer user_data)
 {
-    gboolean message_checkbox_status;
+    GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+    GlEventViewListPrivate *priv;
 
-    message_checkbox_status = g_variant_get_boolean (variant);
-
-    if(message_checkbox_status == TRUE)
-        g_print("message checkbox is enabled\n");
-    else
-        g_print("message_checkbox is not enabled\n");
-
-    checkbox_value[MESSAGE] = message_checkbox_status;
-
-    g_simple_action_set_state (action, variant);
+    priv = gl_event_view_list_get_instance_private (view);
+    gtk_stack_set_visible_child_name (GTK_STACK (priv->parameter_stack), "type-button");
+    g_print("popover_closed\n");
 }
 
+/* Get the popover elements from ui file and link it with the drop down button */
+
 static void
-create_search_dropdown_menu (GlEventViewList *view)
+setup_search_popover (GlEventViewList *view)
 {
 
     GlEventViewListPrivate *priv;
-    GMenu *search_menu;
-    GMenu *parameter_menu;
-    GMenu *search_dialog_menu;
+    GtkBuilder *builder;
 
     priv = gl_event_view_list_get_instance_private (view);
 
-    search_menu = g_menu_new();
-    parameter_menu = g_menu_new();
-    search_dialog_menu = g_menu_new();
+    builder = gtk_builder_new_from_resource ("/org/gnome/Logs/gl-search-popover.ui");
 
-    GMenuItem *pid = g_menu_item_new ("PID", NULL);
-    GMenuItem *process_name = g_menu_item_new ("Process name", NULL);
-    GMenuItem *message = g_menu_item_new ("Message", NULL);
+    /* Get elements from the popover ui file */
+    priv->search_popover = GTK_WIDGET (gtk_builder_get_object (builder, "search_popover"));
+    priv->parameter_stack = GTK_WIDGET (gtk_builder_get_object (builder, "parameter_stack"));
+    priv->parameter_listbox = GTK_WIDGET (gtk_builder_get_object (builder, "parameter_listbox"));
+    priv->parameter_label = GTK_WIDGET (gtk_builder_get_object (builder, "parameter_label"));
 
-    g_menu_item_set_action_and_target_value (pid, "view.pid-status",
-                                            NULL);
-    g_menu_item_set_action_and_target_value (process_name, "view.processname-status",
-                                            NULL);
-    g_menu_item_set_action_and_target_value (message, "view.message-status",
-                                            NULL);
+    /* Link the drop down button with search popover */
+    gtk_menu_button_set_popover (GTK_MENU_BUTTON (priv->search_dropdown_button),
+                                    priv->search_popover);
 
-    g_menu_append_item (parameter_menu, pid);
-    g_menu_append_item (parameter_menu, process_name);
-    g_menu_append_item (parameter_menu, message);
+    /* Connect signals */
+    gtk_builder_add_callback_symbols (builder,
+                                      "select_parameter_button_clicked",
+                                      G_CALLBACK (select_parameter_button_clicked),
+                                      "parameter_listbox_row_activated",
+                                      G_CALLBACK (parameter_listbox_row_activated),
+                                      "search_popover_closed",
+                                      G_CALLBACK (search_popover_closed),
+                                      NULL);
 
-    g_menu_prepend_section (search_menu, "Parameters", G_MENU_MODEL(parameter_menu));
+    gtk_builder_connect_signals (builder, view);
 
-    GMenuItem *search_dialog = g_menu_item_new("Advanced Options", NULL);
 
-    g_menu_append_item(search_dialog_menu, search_dialog);
+    /* Set up header function for parameter listbox */
+    gtk_list_box_set_header_func (GTK_LIST_BOX (priv->parameter_listbox),
+                                  (GtkListBoxUpdateHeaderFunc) parameter_listbox_header_func,
+                                  NULL,
+                                  NULL);
 
-    g_menu_append_section(search_menu, NULL, G_MENU_MODEL(search_dialog_menu));
-
-    gtk_menu_button_set_menu_model (GTK_MENU_BUTTON (priv->search_dropdown_button),
-                                    G_MENU_MODEL(search_menu));
+    /* Fill the listbox */
+    fill_parameter_listbox(view);
 
 }
 
@@ -840,22 +930,12 @@ gl_event_view_list_class_init (GlEventViewListClass *klass)
                                                   search_entry);
     gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
                                                   search_dropdown_button);
-    gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
-                                                  search_menu_popover);
-    gtk_widget_class_bind_template_child_private (widget_class, GlEventViewList,
-                                                  pid_checkbox);
 
     gtk_widget_class_bind_template_callback (widget_class,
                                              on_search_entry_changed);
     gtk_widget_class_bind_template_callback (widget_class,
                                              on_search_bar_notify_search_mode_enabled);
 }
-
-static GActionEntry actions[] = {
-    { "pid-status", NULL, NULL, "true", action_pid_status },
-    { "processname-status", NULL, NULL, "true", action_processname_status },
-    { "message-status", NULL, NULL, "true", action_message_status }
-};
 
 static void
 gl_event_view_list_init (GlEventViewList *view)
@@ -879,16 +959,7 @@ gl_event_view_list_init (GlEventViewList *view)
     priv->journal_model = gl_journal_model_new ();
     g_application_bind_busy_property (g_application_get_default (), priv->journal_model, "loading");
 
-    GActionGroup *event_view_list_action_group = G_ACTION_GROUP (g_simple_action_group_new ());
-
-    g_action_map_add_action_entries (G_ACTION_MAP (event_view_list_action_group), actions,
-                                     G_N_ELEMENTS (actions), view);
-
-    gtk_widget_insert_action_group (GTK_WIDGET (view),
-                                    "view",
-                                    G_ACTION_GROUP (event_view_list_action_group));
-
-    create_search_dropdown_menu(view);
+    setup_search_popover(view);
 
     g_signal_connect (priv->event_scrolled, "edge-reached",
                       G_CALLBACK (gl_event_list_view_edge_reached), view);
