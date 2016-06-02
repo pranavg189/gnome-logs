@@ -541,6 +541,11 @@ range_listbox_row_activated (GtkListBox            *listbox,
 
   group = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (row), "range_group"));
 
+  if(group == 7)
+  {
+    gtk_popover_menu_open_submenu (GTK_POPOVER_MENU(priv->search_popover), "more");
+  }
+
   gtk_label_set_label (GTK_LABEL (priv->select_range_button_label),
                        range_groups[group]);
 
