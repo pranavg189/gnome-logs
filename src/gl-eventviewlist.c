@@ -244,7 +244,7 @@ on_listbox_row_activated (GtkListBox *listbox,
 
     if (gtk_widget_is_toplevel (toplevel))
     {
-        GAction *mode;
+        /*GAction *mode;
         GEnumClass *eclass;
         GEnumValue *evalue;
 
@@ -254,7 +254,13 @@ on_listbox_row_activated (GtkListBox *listbox,
 
         g_action_activate (mode, g_variant_new_string (evalue->value_nick));
 
-        g_type_class_unref (eclass);
+        g_type_class_unref (eclass);*/
+
+        gtk_window_set_transient_for (GTK_WINDOW (priv->search_popover), GTK_WINDOW (toplevel));
+
+        gtk_widget_show_all(priv->search_popover);
+
+        g_print("window in toplevel mode\n");
     }
     else
     {
@@ -616,6 +622,18 @@ clear_range_button_clicked (gpointer user_data)
                        _("Select Journal Range..."));
 }
 
+static void
+popover_dialog_on_response(GtkDialog *dialog, gint response_id, gpointer user_data)
+{
+
+  GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private (view);
+  gtk_widget_hide(GTK_WIDGET(priv->search_popover));
+  g_print("response handler called\n");
+}
+
 /* Get the popover elements from ui file and link it with the drop down button */
 
 static void
@@ -648,8 +666,29 @@ setup_search_popover (GlEventViewList *view)
     priv->range_button_drop_down_image = GTK_WIDGET (gtk_builder_get_object (builder, "range_button_drop_down_image"));
 
     /* Link the drop down button with search popover */
-    gtk_menu_button_set_popover (GTK_MENU_BUTTON (priv->search_dropdown_button),
-                                    priv->search_popover);
+    //gtk_menu_button_set_popover (GTK_MENU_BUTTON (priv->search_dropdown_button),
+    //                                priv->search_popover);
+
+
+    /*gtk_widget_show_all(priv->search_popover);
+
+    GtkWidget *toplevel;
+
+    toplevel = gtk_widget_get_toplevel (GTK_WIDGET (view));
+
+    if(toplevel == GTK_WIDGET(view))
+      g_print("toplevel is null\n");
+
+    if (gtk_widget_is_toplevel(toplevel))
+    {
+      g_print("toplevel window: %s\n", gtk_window_get_title(GTK_WINDOW (toplevel)));
+    }
+    else
+    {
+      g_print("window not in toplevel mode\n");
+    }
+
+    gtk_window_set_transient_for (GTK_WINDOW (priv->search_popover), GTK_WINDOW (toplevel));*/
 
     /* Connect signals */
     gtk_builder_add_callback_symbols (builder,
@@ -665,6 +704,8 @@ setup_search_popover (GlEventViewList *view)
                                       G_CALLBACK (range_listbox_row_activated),
                                       "clear_range_button_clicked",
                                       G_CALLBACK (clear_range_button_clicked),
+                                      "popover_dialog_on_response",
+                                      G_CALLBACK (popover_dialog_on_response),
                                       NULL);
 
     /* pass "GlEventviewlist *view" as user_data to signals as callback data*/
