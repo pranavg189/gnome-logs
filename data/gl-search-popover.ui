@@ -2,10 +2,13 @@
 <!-- Generated with glade 3.20.0 -->
 <interface>
   <requires lib="gtk+" version="3.12"/>
+  <object class="GtkSizeGroup">
+    <property name="ignore_hidden">True</property>
+  </object>
   <object class="GtkPopover" id="search_popover">
     <property name="can_focus">False</property>
+    <property name="position">left</property>
     <property name="modal">False</property>
-    <property name="position">GTK_POS_LEFT</property>
     <signal name="closed" handler="search_popover_closed" swapped="no"/>
     <child>
       <object class="GtkGrid">
@@ -14,23 +17,6 @@
         <property name="border_width">20</property>
         <property name="row_spacing">8</property>
         <property name="column_spacing">18</property>
-        <child>
-          <object class="GtkLabel" id="what_dim_label">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <property name="margin_top">10</property>
-            <property name="label" translatable="yes">What</property>
-            <property name="xalign">0</property>
-            <style>
-              <class name="dim-label"/>
-            </style>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">0</property>
-            <property name="width">2</property>
-          </packing>
-        </child>
         <child>
           <object class="GtkStack" id="parameter_stack">
             <property name="visible">True</property>
@@ -80,7 +66,7 @@
                 </child>
               </object>
               <packing>
-                <property name="name">type-button</property>
+                <property name="name">parameter-button</property>
               </packing>
             </child>
             <child>
@@ -105,7 +91,7 @@
                 </child>
               </object>
               <packing>
-                <property name="name">type-list</property>
+                <property name="name">parameter-list</property>
                 <property name="position">1</property>
               </packing>
             </child>
@@ -117,25 +103,10 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="since_dim_label">
+          <object class="GtkStack" id="select_range_stack">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Since</property>
-            <property name="xalign">0</property>
-            <style>
-              <class name="dim-label"/>
-            </style>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">2</property>
-            <property name="width">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkStack" id="since_date_stack">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="vhomogeneous">False</property>
             <property name="transition_duration">250</property>
             <property name="transition_type">crossfade</property>
             <child>
@@ -143,19 +114,42 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <child>
-                  <object class="GtkButton" id="since_select_date_button">
+                  <object class="GtkButton" id="select_range_button">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="tooltip_text" translatable="yes">Select a date</property>
                     <property name="hexpand">True</property>
-                    <signal name="clicked" handler="since_select_date_button_clicked" swapped="yes"/>
+                    <signal name="clicked" handler="select_range_button_clicked" swapped="yes"/>
                     <child>
-                      <object class="GtkLabel" id="since_select_date_button_label">
+                      <object class="GtkBox">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Select start date..</property>
-                        <property name="xalign">0</property>
+                        <child>
+                          <object class="GtkLabel" id="select_range_button_label">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <property name="label" translatable="yes">Select Journal Range...</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkImage" id="range_button_drop_down_image">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <property name="icon_name">pan-down-symbolic</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="pack_type">end</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -166,13 +160,13 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkButton" id="since_clear_date_button">
+                  <object class="GtkButton" id="clear_range_button">
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="tooltip_text" translatable="yes">Clear the currently selected date</property>
-                    <signal name="clicked" handler="clear_date_button_clicked" swapped="no"/>
+                    <signal name="clicked" handler="clear_range_button_clicked" swapped="yes"/>
                     <child>
-                      <object class="GtkImage" id="since_clear_date_button_image">
+                      <object class="GtkImage" id="clear_range_button_image">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="icon_name">edit-clear-symbolic</property>
@@ -182,7 +176,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="position">2</property>
                   </packing>
                 </child>
                 <style>
@@ -190,20 +184,34 @@
                 </style>
               </object>
               <packing>
-                <property name="name">since-date-button</property>
+                <property name="name">select-range-button</property>
               </packing>
             </child>
             <child>
-              <object class="GtkEntry" id="since_date_entry">
+              <object class="GtkScrolledWindow">
+                <property name="height_request">182</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="secondary_icon_name">x-office-calendar-symbolic</property>
-                <property name="secondary_icon_tooltip_text" translatable="yes">Show a calendar to select the date</property>
-                <signal name="activate" handler="since_date_entry_activate" swapped="no"/>
-                <signal name="icon-release" handler="since_toggle_calendar_icon_clicked" swapped="no"/>
+                <property name="hexpand">True</property>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkViewport">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkListBox" id="select_range_listbox">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="selection_mode">none</property>
+                        <signal name="row-activated" handler="range_listbox_row_activated" swapped="no"/>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
               <packing>
-                <property name="name">since-date-entry</property>
+                <property name="name">select-range-listbox</property>
+                <property name="title" translatable="yes">page0</property>
                 <property name="position">1</property>
               </packing>
             </child>
@@ -211,247 +219,6 @@
           <packing>
             <property name="left_attach">0</property>
             <property name="top_attach">3</property>
-            <property name="width">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkRevealer" id="since_around_revealer">
-            <property name="can_focus">False</property>
-            <child>
-              <object class="GtkGrid">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="row_spacing">8</property>
-                <property name="column_spacing">12</property>
-                <child>
-                  <object class="GtkStack" id="since_around_stack">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="vhomogeneous">False</property>
-                    <property name="transition_duration">250</property>
-                    <property name="transition_type">crossfade</property>
-                    <child>
-                      <object class="GtkScrolledWindow">
-                        <property name="height_request">100</property>
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="hexpand">True</property>
-                        <property name="shadow_type">in</property>
-                        <child>
-                          <object class="GtkViewport">
-                            <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <child>
-                              <object class="GtkListBox" id="since_dates_listbox">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="selection_mode">none</property>
-                                <signal name="row-activated" handler="since_dates_listbox_row_activated" swapped="no"/>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                      <packing>
-                        <property name="name">since-date-list</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkCalendar" id="since_calendar">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="valign">start</property>
-                        <property name="show_week_numbers">True</property>
-                        <signal name="day-selected" handler="since_calendar_day_selected" swapped="no"/>
-                      </object>
-                      <packing>
-                        <property name="name">since-date-calendar</property>
-                        <property name="position">1</property>
-                      </packing>
-                    </child>
-                  </object>
-                  <packing>
-                    <property name="left_attach">0</property>
-                    <property name="top_attach">0</property>
-                    <property name="width">2</property>
-                  </packing>
-                </child>
-              </object>
-            </child>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">4</property>
-            <property name="width">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkLabel" id="until_dim_label">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Until</property>
-            <property name="xalign">0</property>
-            <style>
-              <class name="dim-label"/>
-            </style>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">5</property>
-            <property name="width">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkStack" id="until_date_stack">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <property name="transition_duration">250</property>
-            <property name="transition_type">crossfade</property>
-            <child>
-              <object class="GtkBox">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <child>
-                  <object class="GtkButton" id="until_select_date_button">
-                    <property name="visible">True</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">True</property>
-                    <property name="tooltip_text" translatable="yes">Select a date</property>
-                    <property name="hexpand">True</property>
-                    <signal name="clicked" handler="until_select_date_button_clicked" swapped="yes"/>
-                    <child>
-                      <object class="GtkLabel" id="until_select_date_button_label">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Select end date…</property>
-                        <property name="xalign">0</property>
-                      </object>
-                    </child>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">0</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkButton" id="until_clear_date_button">
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">True</property>
-                    <property name="tooltip_text" translatable="yes">Clear the currently selected date</property>
-                    <child>
-                      <object class="GtkImage" id="until_clear_date_button_image">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="icon_name">edit-clear-symbolic</property>
-                      </object>
-                    </child>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">1</property>
-                  </packing>
-                </child>
-                <style>
-                  <class name="linked"/>
-                </style>
-              </object>
-              <packing>
-                <property name="name">until-date-button</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkEntry" id="until_date_entry">
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="secondary_icon_name">x-office-calendar-symbolic</property>
-                <property name="secondary_icon_tooltip_text" translatable="yes">Show a calendar to select the date</property>
-                <property name="secondary_icon_tooltip_markup" translatable="yes">Show a calendar to select the date</property>
-                <signal name="activate" handler="until_date_entry_activate" swapped="no"/>
-                <signal name="icon-release" handler="until_toggle_calendar_icon_clicked" swapped="no"/>
-              </object>
-              <packing>
-                <property name="name">until-date-entry</property>
-                <property name="position">1</property>
-              </packing>
-            </child>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">6</property>
-            <property name="width">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkRevealer" id="until_around_revealer">
-            <property name="can_focus">False</property>
-            <child>
-              <object class="GtkGrid">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="row_spacing">8</property>
-                <property name="column_spacing">12</property>
-                <child>
-                  <object class="GtkStack" id="until_around_stack">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="vhomogeneous">False</property>
-                    <property name="transition_duration">250</property>
-                    <property name="transition_type">crossfade</property>
-                    <child>
-                      <object class="GtkScrolledWindow">
-                        <property name="height_request">100</property>
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="hexpand">True</property>
-                        <property name="shadow_type">in</property>
-                        <child>
-                          <object class="GtkViewport">
-                            <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <child>
-                              <object class="GtkListBox" id="until_dates_listbox">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="selection_mode">none</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                      <packing>
-                        <property name="name">until-date-list</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkCalendar" id="until_calendar">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="valign">start</property>
-                        <property name="year">2016</property>
-                        <property name="month">5</property>
-                        <property name="day">1</property>
-                        <property name="show_week_numbers">True</property>
-                      </object>
-                      <packing>
-                        <property name="name">until-date-calendar</property>
-                        <property name="position">1</property>
-                      </packing>
-                    </child>
-                  </object>
-                  <packing>
-                    <property name="left_attach">0</property>
-                    <property name="top_attach">0</property>
-                    <property name="width">2</property>
-                  </packing>
-                </child>
-              </object>
-            </child>
-          </object>
-          <packing>
-            <property name="left_attach">0</property>
-            <property name="top_attach">7</property>
             <property name="width">2</property>
           </packing>
         </child>
@@ -468,7 +235,7 @@
           </object>
           <packing>
             <property name="left_attach">0</property>
-            <property name="top_attach">8</property>
+            <property name="top_attach">4</property>
             <property name="width">2</property>
           </packing>
         </child>
@@ -519,17 +286,98 @@
           </object>
           <packing>
             <property name="left_attach">0</property>
-            <property name="top_attach">9</property>
+            <property name="top_attach">5</property>
+            <property name="width">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkStack" id="range_label_stack">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkLabel" id="when_dim_label">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">When</property>
+                <property name="xalign">0</property>
+                <style>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+              <packing>
+                <property name="name">when-label</property>
+                <property name="title" translatable="yes">page0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="show_logs_from_dim_label">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="margin_top">10</property>
+                <property name="label" translatable="yes">Show Logs from....</property>
+                <property name="xalign">0</property>
+                <style>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+              <packing>
+                <property name="name">show-log-from-label</property>
+                <property name="title" translatable="yes">page1</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="left_attach">0</property>
+            <property name="top_attach">2</property>
+            <property name="width">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkStack" id="parameter_label_stack">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkLabel" id="what_dim_label">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="margin_top">10</property>
+                <property name="label" translatable="yes">What</property>
+                <property name="xalign">0</property>
+                <style>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+              <packing>
+                <property name="name">what-label</property>
+                <property name="title" translatable="yes">page0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="select_parameter_label">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="margin_top">10</property>
+                <property name="label" translatable="yes">Select Parameter...</property>
+                <property name="xalign">0</property>
+                <style>
+                  <class name="dim-label"/>
+                </style>
+              </object>
+              <packing>
+                <property name="name">select-parameter-label</property>
+                <property name="title" translatable="yes">page1</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="left_attach">0</property>
+            <property name="top_attach">0</property>
             <property name="width">2</property>
           </packing>
         </child>
       </object>
     </child>
-  </object>
-  <object class="GtkSizeGroup">
-    <property name="ignore_hidden">True</property>
-    <widgets>
-      <widget name="what_dim_label"/>
-    </widgets>
   </object>
 </interface>
