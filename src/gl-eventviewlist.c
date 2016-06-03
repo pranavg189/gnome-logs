@@ -66,6 +66,22 @@ typedef struct
     GtkWidget *clear_range_button;
     GtkWidget *range_button_drop_down_image;
 
+    /* "set custom range" submenu elements */
+    GtkWidget *since_date_stack;
+    GtkWidget *since_around_revealer;
+    GtkWidget *since_select_date_button_label;
+    GtkWidget *since_clear_date_button;
+    GtkWidget *since_date_entry;
+    GtkWidget *since_button_drop_down_image;
+    
+    GtkWidget *until_date_stack;
+    GtkWidget *until_around_revealer;
+    GtkWidget *until_select_date_button_label;
+    GtkWidget *until_clear_date_button;
+    GtkWidget *until_date_entry;
+    GtkWidget *until_button_drop_down_image;
+
+
     gchar *search_text;
     const gchar *boot_match;
 } GlEventViewListPrivate;
@@ -621,6 +637,302 @@ clear_range_button_clicked (gpointer user_data)
                        _("Select Journal Range..."));
 }
 
+static void
+show_since_date_elements (GlEventViewList *view, gboolean visible)
+{
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private (view);
+  
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->since_date_stack),
+                                    visible ? "since-date-entry" : "since-date-button");
+
+  gtk_widget_set_visible (priv->since_around_revealer, visible);
+
+  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->since_around_revealer), visible); 
+}
+
+static void
+show_until_date_elements (GlEventViewList *view, gboolean visible)
+{
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private (view);
+  
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->until_date_stack),
+                                    visible ? "until-date-entry" : "until-date-button");
+
+  gtk_widget_set_visible (priv->until_around_revealer, visible);
+
+  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->until_around_revealer), visible); 
+}
+
+static void
+since_select_date_button_clicked (gpointer user_data)
+{
+  GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+
+  show_since_date_elements (view, TRUE);
+  show_until_date_elements (view, FALSE);
+}
+
+static void
+until_select_date_button_clicked (gpointer user_data)
+{
+  GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+
+  show_until_date_elements (view, TRUE);
+  show_since_date_elements (view, FALSE);
+}
+
+static void
+update_range_time_label(GlEventViewList *view)
+{
+  GlEventViewListPrivate *priv;
+  const gchar *since_button_label;
+  const gchar *until_button_label;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  since_button_label = gtk_entry_get_text (GTK_ENTRY (priv->since_date_entry));
+  until_button_label = gtk_entry_get_text (GTK_ENTRY (priv->until_date_entry));
+
+  if (!*(since_button_label) && !*(until_button_label))
+  {
+    gtk_label_set_label (GTK_LABEL (priv->select_range_button_label), _("Select Journal Range..."));
+    gtk_label_set_label (GTK_LABEL (priv->since_select_date_button_label), _("Select Start Date..."));
+    gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label), _("Select End Date..."));
+  }
+  else if (!*(since_button_label) && *(until_button_label))
+  {
+    gtk_label_set_label (GTK_LABEL (priv->select_range_button_label), g_strdup_printf("Upto %s",until_button_label));
+    gtk_label_set_label (GTK_LABEL (priv->since_select_date_button_label), _("Select Start Date..."));
+  }
+  else if (*(since_button_label) && !*(until_button_label))
+  {
+    gtk_label_set_label (GTK_LABEL (priv->select_range_button_label), g_strdup_printf("From %s",since_button_label));
+    gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label), _("Select End Date..."));
+  }
+  else
+  {
+    gtk_label_set_label (GTK_LABEL (priv->select_range_button_label), g_strdup_printf("Between %s - %s",since_button_label, until_button_label));
+  }
+
+}
+
+/* Restore submenu and menu to it's normal state */
+static void
+custom_range_submenu_back_button_clicked (gpointer user_data)
+{
+  GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  /* hide both the "until" and "since" date elements */
+  show_until_date_elements (view, FALSE);
+  show_since_date_elements (view, FALSE);
+
+  /* Reset range selection button */
+  gtk_widget_hide (priv->clear_range_button);
+  gtk_widget_show (priv->range_button_drop_down_image);
+
+  update_range_time_label(view);
+}
+
+static gchar*
+get_text_for_date_range (GPtrArray *date_range)
+{
+  gint days;
+  gint normalized;
+  GDateTime *initial_date;
+  GDateTime *end_date;
+  gchar *formatted_date;
+  gchar *label;
+
+  if (!date_range)
+    return NULL;
+
+  initial_date = g_ptr_array_index (date_range, 0);
+  end_date = g_ptr_array_index (date_range, 1);
+  days = g_date_time_difference (end_date, initial_date) / G_TIME_SPAN_DAY;
+  formatted_date = g_date_time_format (initial_date, "%x");
+
+
+  if (days < 1)
+    {
+      label = g_strdup (formatted_date);
+    }
+  else
+    {
+      if (days < 7)
+        {
+          /* days */
+          normalized = days;
+          label = g_strdup_printf("%d days ago", normalized);
+        }
+      else if (days < 30)
+        {
+          /* weeks */
+          normalized = days / 7;
+          label = g_strdup_printf("%d weeks ago", normalized);
+        }
+      else if (days < 365)
+        {
+          /* months */
+          normalized = days / 30;
+          label = g_strdup_printf("%d months ago", normalized);
+        }
+      else
+        {
+          /* years */
+          normalized = days / 365;
+          label = g_strdup_printf("%d years ago", normalized);
+        }
+    }
+
+    g_free (formatted_date);
+
+  return label;
+}
+
+/* Update date label */
+static void
+since_update_date_label (GlEventViewList *view,
+                         GPtrArray *date_range)
+{
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  if (date_range)
+    {
+      gint days;
+      GDateTime *initial_date;
+      GDateTime *end_date;
+      GDateTime *now;
+      gchar *label;
+
+      now = g_date_time_new_now_local ();
+      initial_date = g_ptr_array_index (date_range, 0);
+      end_date = g_ptr_array_index (date_range, 0);
+      days = g_date_time_difference (end_date, initial_date) / G_TIME_SPAN_DAY;
+
+      label = get_text_for_date_range (date_range);
+
+      gtk_entry_set_text (GTK_ENTRY (priv->since_date_entry), days < 1 ? label : "");
+      gtk_label_set_label (GTK_LABEL (priv->since_select_date_button_label), days < 1 ? label : "");
+
+      show_since_date_elements(view, FALSE);
+
+      gtk_widget_show (priv->since_clear_date_button);
+      gtk_label_set_label (GTK_LABEL (priv->since_select_date_button_label), label);
+
+      g_date_time_unref (now);
+      g_free (label);
+    }
+  else
+    {
+      gtk_label_set_label (GTK_LABEL (priv->since_select_date_button_label),
+                           _("Select Start Date…"));
+      gtk_entry_set_text (GTK_ENTRY (priv->since_date_entry), "");
+      gtk_widget_hide (priv->since_clear_date_button);
+    }
+}
+
+static void
+until_update_date_label (GlEventViewList *view,
+                         GPtrArray *date_range)
+{
+  GlEventViewListPrivate *priv;
+
+  priv = gl_event_view_list_get_instance_private (view);
+
+  if (date_range)
+    {
+      gint days;
+      GDateTime *initial_date;
+      GDateTime *end_date;
+      GDateTime *now;
+      gchar *label;
+
+      now = g_date_time_new_now_local ();
+      initial_date = g_ptr_array_index (date_range, 0);
+      end_date = g_ptr_array_index (date_range, 0);
+      days = g_date_time_difference (end_date, initial_date) / G_TIME_SPAN_DAY;
+
+      label = get_text_for_date_range (date_range);
+
+      gtk_entry_set_text (GTK_ENTRY (priv->until_date_entry), days < 1 ? label : "");
+      gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label), days < 1 ? label : "");
+
+      show_until_date_elements(view, FALSE);
+
+      gtk_widget_show (priv->until_clear_date_button);
+      gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label), label);
+
+      g_date_time_unref (now);
+      g_free (label);
+    }
+  else
+    {
+      gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label),
+                           _("Select End Date…"));
+      gtk_entry_set_text (GTK_ENTRY (priv->until_date_entry), "");
+      gtk_widget_hide (priv->until_clear_date_button);
+    }
+}
+
+/* Event handlers when calendar day is selected */
+static void
+since_calendar_day_selected (GtkCalendar *calendar, gpointer user_data)
+{
+
+  GDateTime *date;
+  guint year, month, day;
+  GPtrArray *date_range;
+
+  GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+
+  gtk_calendar_get_date (calendar, &year, &month, &day);
+
+  date = g_date_time_new_local (year, month + 1, day, 0, 0, 0);
+
+  date_range = g_ptr_array_new_full (2, (GDestroyNotify) g_date_time_unref);
+  g_ptr_array_add (date_range, g_date_time_ref (date));
+  g_ptr_array_add (date_range, g_date_time_ref (date));
+  since_update_date_label (view, date_range);
+  //g_signal_emit_by_name (popover, "date-range", date_range);
+
+  g_ptr_array_unref (date_range);
+  g_date_time_unref (date);
+
+}
+
+static void
+until_calendar_day_selected (GtkCalendar *calendar, gpointer user_data)
+{
+  GDateTime *date;
+  guint year, month, day;
+  GPtrArray *date_range;
+
+  GlEventViewList *view = GL_EVENT_VIEW_LIST (user_data);
+
+  gtk_calendar_get_date (calendar, &year, &month, &day);
+
+  date = g_date_time_new_local (year, month + 1, day, 0, 0, 0);
+
+  date_range = g_ptr_array_new_full (2, (GDestroyNotify) g_date_time_unref);
+  g_ptr_array_add (date_range, g_date_time_ref (date));
+  g_ptr_array_add (date_range, g_date_time_ref (date));
+  until_update_date_label (view, date_range);
+  //g_signal_emit_by_name (popover, "date-range", date_range);
+
+  g_ptr_array_unref (date_range);
+  g_date_time_unref (date);
+}
+
 /* Get the popover elements from ui file and link it with the drop down button */
 
 static void
@@ -652,6 +964,22 @@ setup_search_popover (GlEventViewList *view)
     priv->clear_range_button = GTK_WIDGET (gtk_builder_get_object (builder, "clear_range_button"));
     priv->range_button_drop_down_image = GTK_WIDGET (gtk_builder_get_object (builder, "range_button_drop_down_image"));
 
+    /* elements related to "Set Custom Range" submenu */
+    priv->since_date_stack = GTK_WIDGET (gtk_builder_get_object (builder, "since_date_stack"));
+    priv->since_around_revealer = GTK_WIDGET (gtk_builder_get_object (builder, "since_around_revealer"));
+    priv->since_select_date_button_label = GTK_WIDGET (gtk_builder_get_object (builder, "since_select_date_button_label"));
+    priv->since_clear_date_button = GTK_WIDGET (gtk_builder_get_object (builder, "since_clear_date_button"));
+    priv->since_date_entry = GTK_WIDGET (gtk_builder_get_object (builder, "since_date_entry"));
+    priv->since_button_drop_down_image = GTK_WIDGET (gtk_builder_get_object (builder, "since_button_drop_down_image"));
+    
+    priv->until_date_stack = GTK_WIDGET (gtk_builder_get_object (builder, "until_date_stack"));
+    priv->until_around_revealer = GTK_WIDGET (gtk_builder_get_object (builder, "until_around_revealer"));
+    priv->until_select_date_button_label = GTK_WIDGET (gtk_builder_get_object (builder, "until_select_date_button_label"));
+    priv->until_clear_date_button = GTK_WIDGET (gtk_builder_get_object (builder, "until_clear_date_button"));
+    priv->until_date_entry = GTK_WIDGET (gtk_builder_get_object (builder, "until_date_entry"));
+    priv->until_button_drop_down_image = GTK_WIDGET (gtk_builder_get_object (builder, "until_button_drop_down_image"));
+
+
     /* Link the drop down button with search popover */
     gtk_menu_button_set_popover (GTK_MENU_BUTTON (priv->search_dropdown_button),
                                     priv->search_popover);
@@ -670,6 +998,16 @@ setup_search_popover (GlEventViewList *view)
                                       G_CALLBACK (range_listbox_row_activated),
                                       "clear_range_button_clicked",
                                       G_CALLBACK (clear_range_button_clicked),
+                                      "since_select_date_button_clicked",
+                                      G_CALLBACK (since_select_date_button_clicked),
+                                      "until_select_date_button_clicked",
+                                      G_CALLBACK (until_select_date_button_clicked),
+                                      "custom_range_submenu_back_button_clicked",
+                                      G_CALLBACK (custom_range_submenu_back_button_clicked),
+                                      "since_calendar_day_selected",
+                                      G_CALLBACK (since_calendar_day_selected),
+                                      "until_calendar_day_selected",
+                                      G_CALLBACK (until_calendar_day_selected),
                                       NULL);
 
     /* pass "GlEventviewlist *view" as user_data to signals as callback data*/
