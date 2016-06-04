@@ -42,9 +42,8 @@
                                     <child>
                                         <object class="GtkMenuButton" id="search_dropdown_button">
                                             <property name="direction">GTK_ARROW_DOWN</property>
-                                            <property name="tooltip-text" translatable="yes">Select the parameter from which to search from</property>
+                                            <property name="tooltip-text" translatable="yes">View search options</property>
                                             <property name="visible">True</property> 
-                                            <!-- <property name="relief">GTK_RELIEF_NONE</property> -->
                                             <style>
                                                 <class name="search-menu-button"/>
                                             </style>
