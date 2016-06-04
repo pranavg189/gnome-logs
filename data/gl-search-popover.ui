@@ -26,7 +26,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="tooltip_text" translatable="yes">Which file types will be searched</property>
+                <property name="tooltip_text" translatable="yes">Select a Journal Parameter</property>
                 <signal name="clicked" handler="select_parameter_button_clicked" swapped="yes"/>
                 <child>
                   <object class="GtkBox">
@@ -115,7 +115,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
-                    <property name="tooltip_text" translatable="yes">Select a date</property>
+                    <property name="tooltip_text" translatable="yes">Select range of journal</property>
                     <property name="hexpand">True</property>
                     <signal name="clicked" handler="select_range_button_clicked" swapped="yes"/>
                     <child>
@@ -410,7 +410,7 @@
           <object class="GtkLabel" id="since_dim_label">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Since</property>
+            <property name="label" translatable="yes">Show Logs Starting From...</property>
             <property name="xalign">0</property>
             <style>
               <class name="dim-label"/>
@@ -437,7 +437,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
-                    <property name="tooltip_text" translatable="yes">Select a date</property>
+                    <property name="tooltip_text" translatable="yes">Select a start date</property>
                     <property name="hexpand">True</property>
                     <signal name="clicked" handler="since_select_date_button_clicked" swapped="yes"/>
                     <child>
@@ -483,7 +483,7 @@
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="tooltip_text" translatable="yes">Clear the currently selected date</property>
-                    <signal name="clicked" handler="since_clear_date_button_clicked" swapped="no"/>
+                    <signal name="clicked" handler="since_clear_date_button_clicked" swapped="yes"/>
                     <child>
                       <object class="GtkImage" id="since_clear_date_button_image">
                         <property name="visible">True</property>
@@ -547,7 +547,7 @@
           <object class="GtkLabel" id="until_dim_label">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Until</property>
+            <property name="label" translatable="yes">Until...</property>
             <property name="xalign">0</property>
             <style>
               <class name="dim-label"/>
@@ -574,7 +574,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
-                    <property name="tooltip_text" translatable="yes">Select a date</property>
+                    <property name="tooltip_text" translatable="yes">Select an end date</property>
                     <property name="hexpand">True</property>
                     <signal name="clicked" handler="until_select_date_button_clicked" swapped="yes"/>
                     <child>
@@ -620,6 +620,7 @@
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="tooltip_text" translatable="yes">Clear the currently selected date</property>
+                    <signal name="clicked" handler="until_clear_date_button_clicked" swapped="yes"/>
                     <child>
                       <object class="GtkImage" id="until_clear_date_button_image">
                         <property name="visible">True</property>
