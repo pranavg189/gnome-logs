@@ -73,7 +73,7 @@ typedef struct
     GtkWidget *since_clear_date_button;
     GtkWidget *since_date_entry;
     GtkWidget *since_button_drop_down_image;
-    
+
     GtkWidget *until_date_stack;
     GtkWidget *until_around_revealer;
     GtkWidget *until_select_date_button_label;
@@ -532,7 +532,7 @@ update_range_time_label (GlEventViewList *view)
   {
     gtk_label_set_label (GTK_LABEL (priv->select_range_button_label), _("Select Journal Range..."));
     gtk_label_set_label (GTK_LABEL (priv->since_select_date_button_label), _("Select Start Date..."));
-    gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label), _("Select End Date..."));    
+    gtk_label_set_label (GTK_LABEL (priv->until_select_date_button_label), _("Select End Date..."));
   }
   else if (!*(since_button_label) && *(until_button_label))
   {
@@ -689,13 +689,13 @@ show_since_date_elements (GlEventViewList *view, gboolean visible)
   GlEventViewListPrivate *priv;
 
   priv = gl_event_view_list_get_instance_private (view);
-  
+
   gtk_stack_set_visible_child_name (GTK_STACK (priv->since_date_stack),
                                     visible ? "since-date-entry" : "since-date-button");
 
   gtk_widget_set_visible (priv->since_around_revealer, visible);
 
-  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->since_around_revealer), visible); 
+  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->since_around_revealer), visible);
 }
 
 static void
@@ -704,13 +704,13 @@ show_until_date_elements (GlEventViewList *view, gboolean visible)
   GlEventViewListPrivate *priv;
 
   priv = gl_event_view_list_get_instance_private (view);
-  
+
   gtk_stack_set_visible_child_name (GTK_STACK (priv->until_date_stack),
                                     visible ? "until-date-entry" : "until-date-button");
 
   gtk_widget_set_visible (priv->until_around_revealer, visible);
 
-  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->until_around_revealer), visible); 
+  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->until_around_revealer), visible);
 }
 
 static void
@@ -901,7 +901,7 @@ since_calendar_day_selected (GtkCalendar *calendar, gpointer user_data)
   date_range = g_ptr_array_new_full (2, (GDestroyNotify) g_date_time_unref);
   g_ptr_array_add (date_range, g_date_time_ref (date));
   g_ptr_array_add (date_range, g_date_time_ref (date));
-  
+
   since_update_date_label (view, date_range);
 
   g_ptr_array_unref (date_range);
@@ -1007,7 +1007,7 @@ since_date_entry_activate (GtkEntry *entry, gpointer user_data)
           date_range = g_ptr_array_new_full (2, (GDestroyNotify) g_date_time_unref);
           g_ptr_array_add (date_range, g_date_time_ref (date_time));
           g_ptr_array_add (date_range, g_date_time_ref (date_time));
-          
+
           since_update_date_label (view, date_range);
 
           show_since_date_elements(view, FALSE);
@@ -1065,7 +1065,7 @@ until_date_entry_activate (GtkEntry *entry, gpointer user_data)
           date_range = g_ptr_array_new_full (2, (GDestroyNotify) g_date_time_unref);
           g_ptr_array_add (date_range, g_date_time_ref (date_time));
           g_ptr_array_add (date_range, g_date_time_ref (date_time));
-          
+
           until_update_date_label (view, date_range);
 
           show_until_date_elements(view, FALSE);
@@ -1081,6 +1081,54 @@ until_date_entry_activate (GtkEntry *entry, gpointer user_data)
       g_date_free (date);
     }
 }
+
+static gint
+ampm_spin_input (GtkSpinButton *spin_button,
+                 gdouble *new_val,
+                 gpointer user_data)
+{
+    const gchar *entry_value;
+
+    entry_value = gtk_entry_get_text(GTK_ENTRY(spin_button));
+
+    if (strstr ("AM", entry_value))
+    {
+        *new_val = 1;
+    }
+    else
+    {
+        *new_val = 0;
+    }
+
+    return TRUE;
+}
+
+static gint
+ampm_spin_output (GtkSpinButton *spin_button,
+                  gpointer data)
+{
+    GtkAdjustment *adjustment;
+    gchar *text;
+    int value;
+
+    adjustment = gtk_spin_button_get_adjustment (spin_button);
+    value = (int)gtk_adjustment_get_value (adjustment);
+
+    if (value == 1)
+    {
+        text = g_strdup_printf ("AM");
+    }
+    else
+    {
+        text = g_strdup_printf ("PM");
+    }
+
+    gtk_entry_set_text (GTK_ENTRY (spin_button), text);
+
+    return TRUE;
+}
+
+
 
 /* Get the popover elements from ui file and link it with the drop down button */
 
@@ -1120,7 +1168,7 @@ setup_search_popover (GlEventViewList *view)
     priv->since_clear_date_button = GTK_WIDGET (gtk_builder_get_object (builder, "since_clear_date_button"));
     priv->since_date_entry = GTK_WIDGET (gtk_builder_get_object (builder, "since_date_entry"));
     priv->since_button_drop_down_image = GTK_WIDGET (gtk_builder_get_object (builder, "since_button_drop_down_image"));
-    
+
     priv->until_date_stack = GTK_WIDGET (gtk_builder_get_object (builder, "until_date_stack"));
     priv->until_around_revealer = GTK_WIDGET (gtk_builder_get_object (builder, "until_around_revealer"));
     priv->until_select_date_button_label = GTK_WIDGET (gtk_builder_get_object (builder, "until_select_date_button_label"));
@@ -1165,6 +1213,10 @@ setup_search_popover (GlEventViewList *view)
                                       G_CALLBACK (since_date_entry_activate),
                                       "until_date_entry_activate",
                                       G_CALLBACK (until_date_entry_activate),
+                                      "ampm_spin_input",
+                                      G_CALLBACK (ampm_spin_input),
+                                      "ampm_spin_output",
+                                      G_CALLBACK (ampm_spin_output),
                                       NULL);
 
     /* pass "GlEventviewlist *view" as user_data to signals as callback data*/
